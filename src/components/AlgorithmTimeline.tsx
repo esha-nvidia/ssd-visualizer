@@ -52,23 +52,26 @@ const ROUND_DATA = [
   {
     draft: ['warm', 'soft', 'velvet', 'couch'],
     bonus: 'cushion',
-    // What the speculator guesses t* might be, for each possible k
-    cacheGuesses: ['cushion', 'rug', 'blanket'],
+    hitGuesses: ['cushion', 'rug', 'blanket'],
+    missGuesses: ['rug', 'blanket', 'sofa'],
   },
   {
     draft: ['beside', 'the', 'crackling', 'fire'],
     bonus: 'warm',
-    cacheGuesses: ['warm', 'old', 'bright'],
+    hitGuesses: ['warm', 'old', 'bright'],
+    missGuesses: ['old', 'bright', 'cozy'],
   },
   {
     draft: ['fireplace', 'while', 'snow', 'fell'],
     bonus: 'drifted',
-    cacheGuesses: ['drifted', 'piled', 'melted'],
+    hitGuesses: ['drifted', 'piled', 'melted'],
+    missGuesses: ['piled', 'melted', 'settled'],
   },
   {
     draft: ['gently', 'outside', 'the', 'window'],
     bonus: 'frosty',
-    cacheGuesses: ['frosty', 'foggy', 'dark'],
+    hitGuesses: ['frosty', 'foggy', 'dark'],
+    missGuesses: ['foggy', 'dark', 'silent'],
   },
 ]
 
@@ -84,6 +87,7 @@ function stepsForRound(cacheHit: boolean): StepType[] {
 
 function getStepDescription(stepType: StepType, round: number, accepted: number, K: number, bonus: string, cacheHit: boolean): string {
   const rd = ROUND_DATA[round]
+  const cacheGuesses = cacheHit ? rd.hitGuesses : rd.missGuesses
   const draftPreview = rd.draft.map(w => `"${w}"`).join(', ')
   switch (stepType) {
     case 'idle':
@@ -91,7 +95,7 @@ function getStepDescription(stepType: StepType, round: number, accepted: number,
     case 'spec-send':
       return `The draft model proposes: ${draftPreview}. These are sent to the large target model for verification.`
     case 'parallel-work':
-      return `KEY INSIGHT: While the verifier checks those ${K} words, the speculator doesn't sit idle — it pre-computes speculations for each possible outcome, guessing what t* might be: ${rd.cacheGuesses.map(w => `"${w}"`).join(', ')}`
+      return `KEY INSIGHT: While the verifier checks those ${K} words, the speculator doesn't sit idle — it pre-computes speculations for each possible outcome, guessing what t* might be: ${cacheGuesses.map(w => `"${w}"`).join(', ')}`
     case 'verify-result':
       return `The verifier accepted ${accepted} of ${K} words${accepted > 0 ? ` (${rd.draft.slice(0, accepted).map(w => `"${w}"`).join(', ')})` : ''}${accepted < K ? `. Rejected "${rd.draft[accepted]}" — the target model preferred something different.` : '.'} Bonus token t* = "${bonus}".`
     case 'cache-check':
@@ -123,11 +127,10 @@ export function AlgorithmTimeline() {
   const rd = ROUND_DATA[currentRound]
   const accepted = acceptedForRound(currentRound, alpha, K)
   const cacheHit = cacheHitForRound(currentRound, pHit)
+  const cacheGuesses = cacheHit ? rd.hitGuesses : rd.missGuesses
   const roundSteps = stepsForRound(cacheHit)
   const stepType = roundSteps[currentStep]
   const totalSteps = roundSteps.length
-  // The bonus token is always in cacheGuesses[0] by design, so a "hit" means we guessed right
-  const bonusInCache = rd.cacheGuesses.includes(rd.bonus)
 
   const tokens: TokenState[] = rd.draft.map((word, i) => {
     let status: TokenState['status'] = 'pending'
@@ -136,12 +139,12 @@ export function AlgorithmTimeline() {
     return { id: `r${currentRound}-t${i}`, label: word, status }
   })
 
-  const cacheEntries: CacheEntry[] = rd.cacheGuesses.map((guess) => {
+  const cacheEntries: CacheEntry[] = cacheGuesses.map((guess) => {
     let status: CacheEntry['status'] = 'building'
     if (currentStep >= 2) status = 'ready'
     if (currentStep >= 4) {
       // A specific entry is a HIT if: overall cache hit occurred AND this guess matches the bonus
-      status = (cacheHit && bonusInCache && guess === rd.bonus) ? 'hit' : 'miss'
+      status = (cacheHit && guess === rd.bonus) ? 'hit' : 'miss'
     }
     return {
       key: `t*="${guess}"`,

@@ -36,6 +36,11 @@ interface RoundModel {
   committed: string[]
 }
 
+interface Playhead {
+  round: number
+  step: number
+}
+
 type StepType =
   | 'idle'
   | 'spec-send'
@@ -220,10 +225,11 @@ export function AlgorithmTimeline() {
   const [pHit, setPHit] = useState(0.8)
   const [speed, setSpeed] = useState(1)
   const [isPlaying, setIsPlaying] = useState(false)
-  const [currentRound, setCurrentRound] = useState(0)
-  const [currentStep, setCurrentStep] = useState(0)
+  const [playhead, setPlayhead] = useState<Playhead>({ round: 0, step: 0 })
 
   const rounds = useMemo(() => simulateRounds(alpha, pHit), [alpha, pHit])
+  const currentRound = Math.min(playhead.round, rounds.length - 1)
+  const currentStep = Math.min(playhead.step, ROUND_STEPS.length - 1)
   const round = rounds[currentRound]
   const nextRound = rounds[currentRound + 1]
   const stepType = ROUND_STEPS[currentStep]
@@ -256,36 +262,37 @@ export function AlgorithmTimeline() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const advance = useCallback(() => {
-    setCurrentStep(prev => {
-      if (prev >= totalSteps - 1) {
-        if (currentRound >= TOTAL_ROUNDS - 1) {
-          setIsPlaying(false)
+    let reachedEnd = false
+    setPlayhead(prev => {
+      if (prev.step >= totalSteps - 1) {
+        if (prev.round >= TOTAL_ROUNDS - 1) {
+          reachedEnd = true
           return prev
         }
-        setCurrentRound(roundIndex => roundIndex + 1)
-        return 0
+        return { round: prev.round + 1, step: 0 }
       }
-      return prev + 1
+      return { round: prev.round, step: prev.step + 1 }
     })
-  }, [currentRound, totalSteps])
+    if (reachedEnd) {
+      setIsPlaying(false)
+    }
+  }, [totalSteps])
 
   const stepBack = useCallback(() => {
-    setCurrentStep(prev => {
-      if (prev <= 0) {
-        if (currentRound > 0) {
-          setCurrentRound(roundIndex => roundIndex - 1)
-          return totalSteps - 1
+    setPlayhead(prev => {
+      if (prev.step <= 0) {
+        if (prev.round > 0) {
+          return { round: prev.round - 1, step: totalSteps - 1 }
         }
-        return 0
+        return prev
       }
-      return prev - 1
+      return { round: prev.round, step: prev.step - 1 }
     })
-  }, [currentRound, totalSteps])
+  }, [totalSteps])
 
   const reset = useCallback(() => {
     setIsPlaying(false)
-    setCurrentRound(0)
-    setCurrentStep(0)
+    setPlayhead({ round: 0, step: 0 })
   }, [])
 
   useEffect(() => {

@@ -20,12 +20,18 @@ interface CacheEntry {
   status: 'building' | 'ready' | 'hit' | 'miss'
 }
 
+interface SequenceToken {
+  word: string
+  kind: 'prompt' | 'accepted' | 'bonus'
+}
+
 type StepType =
   | 'idle'
   | 'spec-send'
   | 'parallel-work'
   | 'verify-result'
   | 'cache-check'
+  | 'fallback-draft'
   | 'next-round'
 
 const STEP_LABELS: Record<StepType, string> = {
@@ -34,6 +40,7 @@ const STEP_LABELS: Record<StepType, string> = {
   'parallel-work': 'Verifier checks tokens while speculator builds cache',
   'verify-result': 'Verifier returns accepted count and bonus token',
   'cache-check': 'Check speculation cache for matching entry',
+  'fallback-draft': 'Fallback drafts the next round after a cache miss',
   'next-round': 'Starting next round',
 }
 
@@ -65,6 +72,16 @@ const ROUND_DATA = [
   },
 ]
 
+function cacheHitForRound(round: number, pHit: number): boolean {
+  return (round * 7 + 3) % 10 < pHit * 10
+}
+
+function stepsForRound(cacheHit: boolean): StepType[] {
+  return cacheHit
+    ? ['idle', 'spec-send', 'parallel-work', 'verify-result', 'cache-check', 'next-round']
+    : ['idle', 'spec-send', 'parallel-work', 'verify-result', 'cache-check', 'fallback-draft', 'next-round']
+}
+
 function getStepDescription(stepType: StepType, round: number, accepted: number, K: number, bonus: string, cacheHit: boolean): string {
   const rd = ROUND_DATA[round]
   const draftPreview = rd.draft.map(w => `"${w}"`).join(', ')
@@ -80,9 +97,11 @@ function getStepDescription(stepType: StepType, round: number, accepted: number,
     case 'cache-check':
       return cacheHit
         ? `Cache HIT! The speculator had pre-computed a speculation for pos=${accepted} accepted, t*="${bonus}". Next round starts instantly with zero idle time.`
-        : `Cache MISS. No pre-computed speculation matched pos=${accepted} accepted, t*="${bonus}". The fallback speculator must generate new draft tokens.`
+        : `Cache MISS. The verifier's bonus token t*="${bonus}" is still committed, but SSD has no matching next-round draft cached for pos=${accepted}.`
+    case 'fallback-draft':
+      return `Fallback speculator regenerates the next draft from the updated prefix ending in "${bonus}". The miss affects the next draft, not the already-committed bonus token.`
     case 'next-round':
-      return `Sequence updated. ${accepted + 1} new words added to the output this round.`
+      return `Sequence updated. ${accepted + 1} new words added to the output this round.${cacheHit ? ' The next round was already cached.' : ' The next round now continues from the fallback draft.'}`
   }
 }
 
@@ -100,16 +119,13 @@ export function AlgorithmTimeline() {
   const [currentStep, setCurrentStep] = useState(0)
 
   const TOTAL_ROUNDS = 4
-  const STEPS_PER_ROUND = 6
-
-  const totalSteps = TOTAL_ROUNDS * STEPS_PER_ROUND
-  const globalStep = currentRound * STEPS_PER_ROUND + currentStep
-  const stepType: StepType = (['idle', 'spec-send', 'parallel-work', 'verify-result', 'cache-check', 'next-round'] as const)[currentStep]
 
   const rd = ROUND_DATA[currentRound]
   const accepted = acceptedForRound(currentRound, alpha, K)
-  // Cache hit if pHit is high enough (deterministic per round so it's reproducible)
-  const cacheHit = (currentRound * 7 + 3) % 10 < pHit * 10
+  const cacheHit = cacheHitForRound(currentRound, pHit)
+  const roundSteps = stepsForRound(cacheHit)
+  const stepType = roundSteps[currentStep]
+  const totalSteps = roundSteps.length
   // The bonus token is always in cacheGuesses[0] by design, so a "hit" means we guessed right
   const bonusInCache = rd.cacheGuesses.includes(rd.bonus)
 
@@ -134,19 +150,23 @@ export function AlgorithmTimeline() {
     }
   })
 
-  const committedRounds = currentStep >= STEPS_PER_ROUND - 1 ? currentRound + 1 : currentRound
-  const sequenceWords = [
-    ...PROMPT_WORDS,
-    ...ROUND_DATA.slice(0, committedRounds).flatMap((roundData, round) => (
-      [...roundData.draft.slice(0, acceptedForRound(round, alpha, K)), roundData.bonus]
-    )),
+  const committedRounds = currentStep >= totalSteps - 1 ? currentRound + 1 : currentRound
+  const sequenceTokens: SequenceToken[] = [
+    ...PROMPT_WORDS.map(word => ({ word, kind: 'prompt' as const })),
+    ...ROUND_DATA.slice(0, committedRounds).flatMap((roundData, round) => {
+      const acceptedCount = acceptedForRound(round, alpha, K)
+      return [
+        ...roundData.draft.slice(0, acceptedCount).map(word => ({ word, kind: 'accepted' as const })),
+        { word: roundData.bonus, kind: 'bonus' as const },
+      ]
+    }),
   ]
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const advance = useCallback(() => {
     setCurrentStep(prev => {
-      if (prev >= STEPS_PER_ROUND - 1) {
+      if (prev >= totalSteps - 1) {
         if (currentRound >= TOTAL_ROUNDS - 1) {
           setIsPlaying(false)
           return prev
@@ -156,20 +176,21 @@ export function AlgorithmTimeline() {
       }
       return prev + 1
     })
-  }, [currentRound])
+  }, [currentRound, totalSteps])
 
   const stepBack = useCallback(() => {
     setCurrentStep(prev => {
       if (prev <= 0) {
         if (currentRound > 0) {
+          const previousRoundSteps = stepsForRound(cacheHitForRound(currentRound - 1, pHit))
           setCurrentRound(r => r - 1)
-          return STEPS_PER_ROUND - 1
+          return previousRoundSteps.length - 1
         }
         return 0
       }
       return prev - 1
     })
-  }, [currentRound])
+  }, [currentRound, pHit])
 
   const reset = useCallback(() => {
     setIsPlaying(false)
@@ -229,7 +250,7 @@ export function AlgorithmTimeline() {
             onReset={reset}
             speed={speed}
             onSpeedChange={setSpeed}
-            currentStep={globalStep}
+            currentStep={currentStep}
             totalSteps={totalSteps}
           />
         </div>
@@ -362,9 +383,14 @@ export function AlgorithmTimeline() {
                   Preparing draft tokens...
                 </motion.div>
               )}
-              {currentStep >= 1 && currentStep < 3 && (
+              {(stepType === 'spec-send' || stepType === 'parallel-work') && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-xs text-text-dim">
                   Drafting + building speculation cache...
+                </motion.div>
+              )}
+              {stepType === 'fallback-draft' && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-xs text-reject">
+                  Cache miss: fallback is generating a fresh draft from &quot;{rd.bonus}&quot;.
                 </motion.div>
               )}
 
@@ -384,7 +410,7 @@ export function AlgorithmTimeline() {
                             {entry.status === 'building' && `Pre-computing: "what comes after '${entry.bonusGuess}'?"...`}
                             {entry.status === 'ready' && `Ready. If the bonus token is "${entry.bonusGuess}", this speculation can be used.`}
                             {entry.status === 'hit' && `MATCH! The bonus token was indeed "${entry.bonusGuess}". Next round starts instantly.`}
-                            {entry.status === 'miss' && `No match — the bonus token was "${rd.bonus}", not "${entry.bonusGuess}".`}
+                            {entry.status === 'miss' && `No match — the bonus token was "${rd.bonus}", not "${entry.bonusGuess}". "${rd.bonus}" still stays in the output; SSD just falls back for the next draft.`}
                           </div>
                         </div>
                       }
@@ -405,16 +431,31 @@ export function AlgorithmTimeline() {
           <div className="mt-4">
             <span className="text-xs text-text-dim mr-2">Generated text:</span>
             <div className="mt-1.5 p-2.5 rounded-lg bg-surface/80 border border-border/50 min-h-[2.5rem] flex flex-wrap items-center gap-1">
-              {sequenceWords.map((word, i) => (
-                <motion.span
-                  key={`${i}-${word}`}
-                  initial={i >= PROMPT_WORDS.length ? { scale: 0, opacity: 0 } : false}
-                  animate={{ scale: 1, opacity: 1 }}
-                  className={`text-sm font-mono ${i < PROMPT_WORDS.length ? 'text-text-dim' : 'text-accept font-medium'}`}
-                >
-                  {word}
-                </motion.span>
-              ))}
+              {sequenceTokens.map((token, i) => {
+                const className = token.kind === 'prompt'
+                  ? 'text-text-dim'
+                  : token.kind === 'bonus'
+                    ? 'text-verify font-semibold underline decoration-verify/40 underline-offset-2'
+                    : 'text-accept font-medium'
+
+                const tooltip = token.kind === 'prompt'
+                  ? 'Prompt token'
+                  : token.kind === 'bonus'
+                    ? 'Verifier bonus token t* — committed whether the cache hits or misses'
+                    : 'Accepted draft token'
+
+                return (
+                  <Tooltip key={`${i}-${token.word}-${token.kind}`} content={tooltip}>
+                    <motion.span
+                      initial={token.kind !== 'prompt' ? { scale: 0, opacity: 0 } : false}
+                      animate={{ scale: 1, opacity: 1 }}
+                      className={`text-sm font-mono ${className}`}
+                    >
+                      {token.word}
+                    </motion.span>
+                  </Tooltip>
+                )
+              })}
             </div>
           </div>
         </div>

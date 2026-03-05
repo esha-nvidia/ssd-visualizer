@@ -98,7 +98,7 @@ export function AnimationControls({
         <>
           <div className="h-6 w-px bg-border mx-1" />
           <span className="text-xs text-text-dim font-mono tabular-nums">
-            {currentStep + 1}/{totalSteps}
+            Step {currentStep + 1}/{totalSteps}
           </span>
         </>
       )}

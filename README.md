@@ -4,11 +4,21 @@ An interactive web-based visualization of **Speculative Speculative Decoding (SS
 
 The goal is to make the SSD framework intuitive through step-by-step animations and interactive controls, so that readers can build a mental model of how asynchronous speculative decoding works and why each optimization matters.
 
+Reference figures from the paper are in [`reference-figures/`](./reference-figures/) and shown inline below. Each visualization takes a static figure from the paper and turns it into an interactive, animated version.
+
 ---
 
 ## Visualizations
 
 ### 1. Algorithm 1 — The SSD Main Loop (Hero Animation)
+
+> **Reference: Figure 1 (paper) + Algorithm 1**
+>
+> | Paper Figure 1 | Algorithm 1 pseudocode |
+> |---|---|
+> | ![Figure 1](./reference-figures/fig1-sd-vs-ssd-overview.png) | ![Algorithm 1](./reference-figures/fig-algorithm1.png) |
+>
+> *Figure 1 shows the key insight: SD is sequential (left), SSD overlaps drafting and verification (center). Our animation brings this to life step by step.*
 
 A split-view animation showing the **verifier** and **speculator** running in parallel on separate timelines.
 
@@ -38,6 +48,12 @@ A split-view animation showing the **verifier** and **speculator** running in pa
 
 ### 2. Speculation Cache & Verification Outcome Prediction (Section 4.1)
 
+> **Reference: Figure 2 (paper)**
+>
+> ![Figure 2 — Cache Schematic](./reference-figures/fig2-cache-schematic.png)
+>
+> *The paper shows a static tree of fan-out branches at each position. Our version lets you drag the budget slider, toggle uniform vs geometric, and watch the tree reshape in real time.*
+
 Visualizes how Saguaro decides *which* verification outcomes to pre-speculate for.
 
 **Layout:**
@@ -60,6 +76,12 @@ Visualizes how Saguaro decides *which* verification outcomes to pre-speculate fo
 ---
 
 ### 3. Saguaro Sampling & the Acceptance/Cache-Hit Tradeoff (Section 4.2)
+
+> **Reference: Figure 5 (paper)**
+>
+> ![Figure 5 — Saguaro Sampling](./reference-figures/fig5-saguaro-sampling.png)
+>
+> *The paper's Figure 5 shows the tradeoff curve (left) and before/after bar charts (right) as static images. Our version makes the C slider interactive — drag it and watch the draft distribution, residual, acceptance rate, and cache hit rate all update live.*
 
 Visualizes how Saguaro sampling manipulates the draft distribution to control the residual.
 
@@ -88,6 +110,12 @@ Visualizes how Saguaro sampling manipulates the draft distribution to control th
 
 ### 4. Fallback Strategy & Batch Size (Section 4.3)
 
+> **Reference: Figure 6 (paper)**
+>
+> ![Figure 6 — Fallback & Batch Size](./reference-figures/fig6-fallback-batch.png)
+>
+> *Figure 6 shows that fast backup wins at large batch sizes (left) and that more draft GPUs help (right). Our animation shows parallel batch lanes where you can watch cache misses stall the whole batch, and see the crossover point shift as you drag the batch size slider.*
+
 Visualizes why the optimal backup speculator changes with batch size.
 
 **Layout:**
@@ -110,6 +138,14 @@ Visualizes why the optimal backup speculator changes with batch size.
 
 ### 5. Power-Law Cache Hit Scaling (Section 4.1.3)
 
+> **Reference: Figure 3 + Figure 4 (paper)**
+>
+> | Figure 3 — Power-law scaling | Figure 4 — Geometric vs uniform |
+> |---|---|
+> | ![Figure 3](./reference-figures/fig3-power-law-cache-hits.png) | ![Figure 4](./reference-figures/fig4-geometric-fanout.png) |
+>
+> *Figure 3's log-log plots show the power-law relationship between fan-out and cache misses. Figure 4 shows geometric fan-out beating uniform, especially at high temperature. Our interactive version lets you sweep the exponent `r`, acceptance rate, and temperature to see how the curves shift.*
+
 A log-log plot showing how cache miss rate decreases as a power law with fan-out.
 
 **Layout:**
@@ -126,6 +162,12 @@ A log-log plot showing how cache miss rate decreases as a power law with fan-out
 ---
 
 ### 6. SD vs SSD Side-by-Side Timeline
+
+> **Reference: Figure 7 (paper)**
+>
+> ![Figure 7 — End-to-end results](./reference-figures/fig7-end-to-end.png)
+>
+> *Figure 7 shows the final speedup numbers and Pareto frontier. Our Gantt-chart animation shows *why* those speedups happen — you can see the idle time in SD disappear as SSD overlaps the draft and verify phases.*
 
 A Gantt-chart-style comparison of ordinary SD and SSD over multiple rounds.
 

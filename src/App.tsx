@@ -72,39 +72,38 @@ function App() {
         <div className="max-w-5xl mx-auto px-4 pt-8 pb-4">
           <div className="p-4 rounded-xl bg-surface-2 border border-border mb-4">
             <p className="text-sm text-text-dim leading-relaxed">
-              <span className="text-text font-medium">Standard Speculative Decoding (SD)</span> uses a small draft model to generate candidate tokens, then a large target model to verify them.
-              The bottleneck: drafting and verification are <span className="text-reject">sequential</span>.{' '}
-              <span className="text-text font-medium">SSD</span> eliminates this idle time by having the speculator{' '}
-              <span className="text-accept">predict verification outcomes and pre-compute the next speculation</span> while verification runs.
-              The <span className="text-cache-hit font-medium">Saguaro algorithm</span> optimizes cache construction, sampling, and fallback strategy.
+              <span className="text-text font-medium">SD</span> uses a small draft model and a large verifier, but they run{' '}
+              <span className="text-reject">sequentially</span>. <span className="text-text font-medium">SSD</span> overlaps them:
+              while the verifier checks the current draft, the speculator <span className="text-accept">predicts likely verification outcomes and prepares the next speculation</span>.
+              <span className="text-cache-hit font-medium"> Saguaro</span> improves cache shape, sampling, and fallback.
             </p>
             <p className="text-xs text-text-dim mt-2">
-              Hover over any element for detailed explanations. Expand the explanation panels below each visualization for the math.
-              Click "Paper fig." buttons to see the original figure from the paper.
+              Hover for details, open the cards for the math, and use "Paper fig." to compare with the original figure.
             </p>
           </div>
 
           <div className="mb-8">
-            <ConceptCard title="Quick glossary: all variables and acronyms used in this visualizer">
+            <ConceptCard title="Quick glossary">
               <div className="grid grid-cols-2 gap-x-6 gap-y-1.5">
-                <p><M color="#3b82f6">{'\\text{SD}'}</M> — Speculative Decoding (standard, sequential)</p>
-                <p><M color="#3b82f6">{'\\text{SSD}'}</M> — Speculative <em>Speculative</em> Decoding (this paper)</p>
-                <p><M color="#f59e0b">{'\\text{Speculator}'}</M> — the small, fast draft model</p>
-                <p><M color="#3b82f6">{'\\text{Verifier}'}</M> — the large, accurate target model</p>
-                <p><M>{'K'}</M> — speculation lookahead (tokens drafted per round)</p>
-                <p><M color="#22c55e">{'\\alpha'}</M> — acceptance rate: <M>{'P(\\text{token passes verification})'}</M></p>
-                <p><M>{'v = (k, t^*)'}</M> — verification outcome: <M>{'k'}</M> accepted + bonus token <M>{'t^*'}</M></p>
-                <p><M>{'t^*'}</M> — bonus token, sampled from the residual distribution</p>
-                <p><M color="#8b5cf6">{'\\text{Speculation cache}'}</M> — pre-computed speculations for predicted outcomes</p>
-                <p><M color="#8b5cf6">{'p_{\\text{hit}}'}</M> — probability of a cache hit</p>
-                <p><M>{'B'}</M> — cache budget (total pre-computed speculations)</p>
-                <p><M>{'F,\\, F_k'}</M> — fan-out (number of guesses per position <M>{'k'}</M>)</p>
-                <p><M>{'C'}</M> — Saguaro downweighting constant <M>{'(0 \\leq C \\leq 1)'}</M></p>
-                <p><M>{'r(t)'}</M> — residual: <M>{'\\max(p_{\\text{target}} - p_{\\text{draft}},\\, 0) / Z'}</M></p>
-                <p><M>{'r'}</M> — power-law exponent for cache miss scaling</p>
-                <p><M>{'b'}</M> — batch size (sequences decoded in parallel)</p>
-                <p><M>{'b^*'}</M> — critical batch size (crossover for backup strategy)</p>
-                <p><M>{'T'}</M> — temperature (controls distribution entropy)</p>
+                <p><M color="#3b82f6">{'\\text{SD}'}</M> — standard speculative decoding</p>
+                <p><M color="#3b82f6">{'\\text{SSD}'}</M> — speculative speculative decoding</p>
+                <p><M color="#f59e0b">{'\\text{Speculator}'}</M> — small draft model</p>
+                <p><M color="#3b82f6">{'\\text{Verifier}'}</M> — large target model</p>
+                <p><M>{'K'}</M> — lookahead per round</p>
+                <p><M>{'\\text{pos}'}</M> — accepted count; paper writes <M>{'k'}</M></p>
+                <p><M color="#22c55e">{'\\alpha'}</M> — per-token acceptance rate</p>
+                <p><M>{'v = (\\text{pos}, t^*)'}</M> — verifier output</p>
+                <p><M>{'t^*'}</M> — bonus token</p>
+                <p><M color="#8b5cf6">{'\\text{Speculation cache}'}</M> — precomputed next drafts</p>
+                <p><M color="#8b5cf6">{'p_{\\text{hit}}'}</M> — cache-hit probability</p>
+                <p><M>{'B'}</M> — cache budget</p>
+                <p><M>{'F_{\\text{pos}}'}</M> — fan-out at accepted count <M>{'\\text{pos}'}</M></p>
+                <p><M>{'C'}</M> — Saguaro downweight constant</p>
+                <p><M>{'r(t)'}</M> — residual distribution</p>
+                <p><M>{'\\rho'}</M> — power-law exponent; paper also uses <M>{'r'}</M></p>
+                <p><M>{'b'}</M> — batch size</p>
+                <p><M>{'b^*'}</M> — fallback crossover batch size</p>
+                <p><M>{'T'}</M> — temperature</p>
               </div>
             </ConceptCard>
           </div>

@@ -16,7 +16,7 @@ interface TokenState {
 
 interface CacheEntry {
   key: string
-  tokens: string[]
+  bonusGuess: string
   status: 'building' | 'ready' | 'hit' | 'miss'
 }
 
@@ -37,24 +37,67 @@ const STEP_LABELS: Record<StepType, string> = {
   'next-round': 'Starting next round',
 }
 
-const STEP_DESCRIPTIONS: Record<StepType, string> = {
-  'idle': 'The SSD loop is about to begin. The speculator will send draft tokens to the verifier.',
-  'spec-send': 'The draft model generates K candidate tokens and sends them to the verifier for checking. This is the same as standard SD.',
-  'parallel-work': 'KEY INSIGHT: While the verifier checks tokens, the speculator predicts which tokens will be accepted and pre-computes speculations for each possible outcome. This parallelism is what makes SSD faster.',
-  'verify-result': 'The verifier returns v = (k, t*): how many tokens were accepted (k) and the bonus token (t*). In standard SD, the speculator would now need to draft new tokens from scratch.',
-  'cache-check': 'SSD checks the speculation cache for a pre-computed speculation matching (k, t*). On a HIT, the next round starts immediately with zero idle time. On a MISS, a fallback speculator must generate new tokens.',
-  'next-round': 'The round is complete. Accepted tokens are added to the sequence.',
+const PROMPT_WORDS = ['The', 'cat', 'sat', 'on', 'the']
+
+// Each round: the draft model proposes 4 words, and the target model may reject some.
+// The bonus token is what the target model would have said instead.
+const ROUND_DATA = [
+  {
+    draft: ['warm', 'soft', 'velvet', 'couch'],
+    bonus: 'cushion',
+    // What the speculator guesses t* might be, for each possible k
+    cacheGuesses: ['cushion', 'rug', 'blanket'],
+  },
+  {
+    draft: ['beside', 'the', 'crackling', 'fire'],
+    bonus: 'warm',
+    cacheGuesses: ['warm', 'old', 'bright'],
+  },
+  {
+    draft: ['fireplace', 'while', 'snow', 'fell'],
+    bonus: 'drifted',
+    cacheGuesses: ['drifted', 'piled', 'melted'],
+  },
+  {
+    draft: ['gently', 'outside', 'the', 'window'],
+    bonus: 'frosty',
+    cacheGuesses: ['frosty', 'foggy', 'dark'],
+  },
+]
+
+function getStepDescription(stepType: StepType, round: number, accepted: number, K: number, bonus: string, cacheHit: boolean): string {
+  const rd = ROUND_DATA[round]
+  const draftPreview = rd.draft.map(w => `"${w}"`).join(', ')
+  switch (stepType) {
+    case 'idle':
+      return `The speculator (draft model) is about to guess the next ${K} words: ${draftPreview}`
+    case 'spec-send':
+      return `The draft model proposes: ${draftPreview}. These are sent to the large target model for verification.`
+    case 'parallel-work':
+      return `KEY INSIGHT: While the verifier checks those ${K} words, the speculator doesn't sit idle — it pre-computes speculations for each possible outcome, guessing what t* might be: ${rd.cacheGuesses.map(w => `"${w}"`).join(', ')}`
+    case 'verify-result':
+      return `The verifier accepted ${accepted} of ${K} words${accepted > 0 ? ` (${rd.draft.slice(0, accepted).map(w => `"${w}"`).join(', ')})` : ''}${accepted < K ? `. Rejected "${rd.draft[accepted]}" — the target model preferred something different.` : '.'} Bonus token t* = "${bonus}".`
+    case 'cache-check':
+      return cacheHit
+        ? `Cache HIT! The speculator had pre-computed a speculation for pos=${accepted} accepted, t*="${bonus}". Next round starts instantly with zero idle time.`
+        : `Cache MISS. No pre-computed speculation matched pos=${accepted} accepted, t*="${bonus}". The fallback speculator must generate new draft tokens.`
+    case 'next-round':
+      return `Sequence updated. ${accepted + 1} new words added to the output this round.`
+  }
+}
+
+function acceptedForRound(round: number, alpha: number, K: number): number {
+  return Math.max(0, Math.min(K, Math.floor(alpha * K + (round % 2 === 0 ? 0.5 : -0.3))))
 }
 
 export function AlgorithmTimeline() {
   const [alpha, setAlpha] = useState(0.7)
   const [pHit, setPHit] = useState(0.8)
-  const [K] = useState(4)
+  const K = 4
   const [speed, setSpeed] = useState(1)
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentRound, setCurrentRound] = useState(0)
   const [currentStep, setCurrentStep] = useState(0)
-  const [totalTokens, setTotalTokens] = useState(0)
 
   const TOTAL_ROUNDS = 4
   const STEPS_PER_ROUND = 6
@@ -63,47 +106,57 @@ export function AlgorithmTimeline() {
   const globalStep = currentRound * STEPS_PER_ROUND + currentStep
   const stepType: StepType = (['idle', 'spec-send', 'parallel-work', 'verify-result', 'cache-check', 'next-round'] as const)[currentStep]
 
-  const accepted = Math.min(K, Math.floor(alpha * K + (currentRound % 2 === 0 ? 0.5 : -0.3)))
+  const rd = ROUND_DATA[currentRound]
+  const accepted = acceptedForRound(currentRound, alpha, K)
+  // Cache hit if pHit is high enough (deterministic per round so it's reproducible)
   const cacheHit = (currentRound * 7 + 3) % 10 < pHit * 10
+  // The bonus token is always in cacheGuesses[0] by design, so a "hit" means we guessed right
+  const bonusInCache = rd.cacheGuesses.includes(rd.bonus)
 
-  const tokens: TokenState[] = Array.from({ length: K }, (_, i) => {
+  const tokens: TokenState[] = rd.draft.map((word, i) => {
     let status: TokenState['status'] = 'pending'
     if (currentStep >= 1) status = 'sent'
     if (currentStep >= 3) status = i < accepted ? 'accepted' : 'rejected'
-    return { id: `r${currentRound}-t${i}`, label: `s${i + 1}`, status }
+    return { id: `r${currentRound}-t${i}`, label: word, status }
   })
 
-  const cacheEntries: CacheEntry[] = Array.from({ length: Math.min(3, K) }, (_, i) => {
+  const cacheEntries: CacheEntry[] = rd.cacheGuesses.map((guess) => {
     let status: CacheEntry['status'] = 'building'
     if (currentStep >= 2) status = 'ready'
     if (currentStep >= 4) {
-      status = (cacheHit && i === accepted % 3) ? 'hit' : 'miss'
+      // A specific entry is a HIT if: overall cache hit occurred AND this guess matches the bonus
+      status = (cacheHit && bonusInCache && guess === rd.bonus) ? 'hit' : 'miss'
     }
     return {
-      key: `k=${i}, t*=...`,
-      tokens: [`c${i}a`, `c${i}b`],
+      key: `t*="${guess}"`,
+      bonusGuess: guess,
       status,
     }
   })
+
+  const committedRounds = currentStep >= STEPS_PER_ROUND - 1 ? currentRound + 1 : currentRound
+  const sequenceWords = [
+    ...PROMPT_WORDS,
+    ...ROUND_DATA.slice(0, committedRounds).flatMap((roundData, round) => (
+      [...roundData.draft.slice(0, acceptedForRound(round, alpha, K)), roundData.bonus]
+    )),
+  ]
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const advance = useCallback(() => {
     setCurrentStep(prev => {
       if (prev >= STEPS_PER_ROUND - 1) {
-        setCurrentRound(r => {
-          if (r >= TOTAL_ROUNDS - 1) {
-            setIsPlaying(false)
-            return r
-          }
-          return r + 1
-        })
-        setTotalTokens(t => t + accepted + 1)
+        if (currentRound >= TOTAL_ROUNDS - 1) {
+          setIsPlaying(false)
+          return prev
+        }
+        setCurrentRound(r => r + 1)
         return 0
       }
       return prev + 1
     })
-  }, [accepted])
+  }, [currentRound])
 
   const stepBack = useCallback(() => {
     setCurrentStep(prev => {
@@ -122,7 +175,6 @@ export function AlgorithmTimeline() {
     setIsPlaying(false)
     setCurrentRound(0)
     setCurrentStep(0)
-    setTotalTokens(0)
   }, [])
 
   useEffect(() => {
@@ -154,8 +206,8 @@ export function AlgorithmTimeline() {
     <SectionHeader
       number={1}
       title="The SSD Main Loop"
-      subtitle="Verifier and speculator running in parallel with a speculation cache"
-      tooltip="Algorithm 1 from the paper. The key insight: while the verifier checks tokens, the speculator pre-computes speculations for predicted verification outcomes."
+      subtitle="Verifier and speculator running in parallel"
+      tooltip="Algorithm 1: while the verifier checks the current draft, the speculator pre-computes likely next outcomes."
       referenceFigure="./reference-figures/fig1-sd-vs-ssd-overview.png"
     >
       <div className="bg-surface-2 rounded-xl p-5 border border-border">
@@ -184,7 +236,7 @@ export function AlgorithmTimeline() {
 
         <AnimatePresence mode="wait">
           <motion.div
-            key={stepType}
+            key={`${currentRound}-${stepType}`}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
@@ -193,7 +245,7 @@ export function AlgorithmTimeline() {
             <div className="text-sm font-medium text-verify mb-1">
               Round {currentRound + 1} &mdash; {STEP_LABELS[stepType]}
             </div>
-            <div className="text-xs text-text-dim">{STEP_DESCRIPTIONS[stepType]}</div>
+            <div className="text-xs text-text-dim">{getStepDescription(stepType, currentRound, accepted, K, rd.bonus, cacheHit)}</div>
           </motion.div>
         </AnimatePresence>
 
@@ -213,9 +265,9 @@ export function AlgorithmTimeline() {
                     <Tooltip
                       key={t.id}
                       content={
-                        t.status === 'accepted' ? `Token "${t.label}" accepted - matches target distribution` :
-                        t.status === 'rejected' ? `Token "${t.label}" rejected - diverges from target` :
-                        `Token "${t.label}" being verified`
+                        t.status === 'accepted' ? `"${t.label}" ✓ accepted — the target model agrees with this word` :
+                        t.status === 'rejected' ? `"${t.label}" ✗ rejected — the target model would have chosen differently. All words after this are discarded.` :
+                        `"${t.label}" — being verified against the target model`
                       }
                     >
                       <motion.div
@@ -225,16 +277,16 @@ export function AlgorithmTimeline() {
                           backgroundColor: tokenColor(t.status),
                         }}
                         transition={{ type: 'spring', stiffness: 500, damping: 25 }}
-                        className="w-10 h-10 rounded-lg flex items-center justify-center text-xs font-bold text-white cursor-default"
+                        className="relative h-10 rounded-lg flex items-center justify-center text-xs font-bold text-white cursor-default px-2.5 min-w-[2.5rem]"
                       >
                         {t.label}
                         {t.status === 'accepted' && (
-                          <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} className="absolute text-[8px]" style={{ marginTop: -16 }}>
+                          <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} className="absolute -top-1.5 -right-1 text-[10px] bg-accept rounded-full w-4 h-4 flex items-center justify-center border border-white/30">
                             ✓
                           </motion.span>
                         )}
                         {t.status === 'rejected' && (
-                          <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} className="absolute text-[8px]" style={{ marginTop: -16 }}>
+                          <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} className="absolute -top-1.5 -right-1 text-[10px] bg-reject rounded-full w-4 h-4 flex items-center justify-center border border-white/30">
                             ✗
                           </motion.span>
                         )}
@@ -258,13 +310,13 @@ export function AlgorithmTimeline() {
                 </motion.div>
               )}
               {currentStep >= 3 && (
-                <Tooltip content={`Verification result: ${accepted} of ${K} tokens accepted. Bonus token t* sampled from adjusted distribution.`}>
+                <Tooltip content={`Verification result: ${accepted} of ${K} words accepted. Bonus token t* = "${rd.bonus}" sampled from the residual distribution.`}>
                   <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     className="ml-auto px-2 py-1 rounded bg-verify/20 text-verify text-xs font-mono"
                   >
-                    v = ({accepted}, t*)
+                    v = (pos={accepted}, "{rd.bonus}")
                   </motion.div>
                 </Tooltip>
               )}
@@ -274,26 +326,26 @@ export function AlgorithmTimeline() {
           <div className="flex justify-center my-1">
             <AnimatePresence>
               {currentStep === 1 && (
-                <Tooltip content="Draft tokens sent from speculator to verifier for checking">
+                <Tooltip content={`Draft model proposes: ${rd.draft.map(w => `"${w}"`).join(', ')}`}>
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0 }}
-                    className="text-draft text-lg"
+                    className="text-draft text-sm font-mono"
                   >
-                    ↑ draft tokens
+                    ↑ "{rd.draft.join(' ')}"
                   </motion.div>
                 </Tooltip>
               )}
               {currentStep === 3 && (
-                <Tooltip content="Verification outcome: how many accepted (k) and the bonus token (t*)">
+                <Tooltip content={`Verifier accepted ${accepted} words (pos=${accepted}), bonus token t* = "${rd.bonus}"`}>
                   <motion.div
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0 }}
-                    className="text-verify text-lg"
+                    className="text-verify text-sm font-mono"
                   >
-                    ↓ v = (k, t*)
+                    ↓ v = (pos={accepted}, "{rd.bonus}")
                   </motion.div>
                 </Tooltip>
               )}
@@ -327,21 +379,21 @@ export function AlgorithmTimeline() {
                       key={i}
                       content={
                         <div>
-                          <div className="font-medium">Cache entry: {entry.key}</div>
+                          <div className="font-medium">Cache slot: if t* = "{entry.bonusGuess}"</div>
                           <div className="text-text-dim mt-1">
-                            {entry.status === 'building' && 'Pre-computing speculation for this outcome...'}
-                            {entry.status === 'ready' && 'Speculation ready. Waiting for verification result.'}
-                            {entry.status === 'hit' && 'MATCH! This speculation can be used immediately.'}
-                            {entry.status === 'miss' && 'No match. This pre-computation was wasted (but cheap).'}
+                            {entry.status === 'building' && `Pre-computing: "what comes after '${entry.bonusGuess}'?"...`}
+                            {entry.status === 'ready' && `Ready. If the bonus token is "${entry.bonusGuess}", this speculation can be used.`}
+                            {entry.status === 'hit' && `MATCH! The bonus token was indeed "${entry.bonusGuess}". Next round starts instantly.`}
+                            {entry.status === 'miss' && `No match — the bonus token was "${rd.bonus}", not "${entry.bonusGuess}".`}
                           </div>
                         </div>
                       }
                     >
                       <motion.div
                         animate={{ backgroundColor: cacheColor(entry.status) }}
-                        className="w-16 h-9 rounded-md flex items-center justify-center text-[10px] font-mono text-white cursor-default border border-white/10"
+                        className="h-9 rounded-md flex items-center justify-center text-[10px] font-mono text-white cursor-default border border-white/10 px-2 min-w-[4rem]"
                       >
-                        {entry.status === 'hit' ? 'HIT' : entry.status === 'miss' ? 'miss' : entry.key.slice(0, 5)}
+                        {entry.status === 'hit' ? `HIT ✓` : entry.status === 'miss' ? 'miss' : `t*="${entry.bonusGuess}"`}
                       </motion.div>
                     </Tooltip>
                   ))}
@@ -350,17 +402,20 @@ export function AlgorithmTimeline() {
             </div>
           </div>
 
-          <div className="mt-4 flex items-center gap-1.5">
-            <span className="text-xs text-text-dim mr-2">Sequence:</span>
-            {Array.from({ length: totalTokens }, (_, i) => (
-              <motion.div
-                key={i}
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                className="w-5 h-5 rounded bg-accept/80 border border-accept/40"
-              />
-            ))}
-            {totalTokens === 0 && <span className="text-xs text-text-dim italic">empty</span>}
+          <div className="mt-4">
+            <span className="text-xs text-text-dim mr-2">Generated text:</span>
+            <div className="mt-1.5 p-2.5 rounded-lg bg-surface/80 border border-border/50 min-h-[2.5rem] flex flex-wrap items-center gap-1">
+              {sequenceWords.map((word, i) => (
+                <motion.span
+                  key={`${i}-${word}`}
+                  initial={i >= PROMPT_WORDS.length ? { scale: 0, opacity: 0 } : false}
+                  animate={{ scale: 1, opacity: 1 }}
+                  className={`text-sm font-mono ${i < PROMPT_WORDS.length ? 'text-text-dim' : 'text-accept font-medium'}`}
+                >
+                  {word}
+                </motion.span>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -379,54 +434,33 @@ export function AlgorithmTimeline() {
         <div className="space-y-2">
           <ConceptCard title="Key terms: SD, SSD, Verifier, Speculator" defaultOpen>
             <p>
-              <M color="#f59e0b">{'\\textbf{Speculative Decoding (SD)}'}</M> speeds up LLM inference.
-              Instead of generating one token at a time with the large <M color="#3b82f6">{'\\text{target model}'}</M> (the "verifier"),
-              a smaller, faster <M color="#f59e0b">{'\\text{draft model}'}</M> (the "speculator") generates{' '}
-              <M>{'K'}</M> candidate tokens in bulk.
-              The verifier checks all <M>{'K'}</M> tokens in a single forward pass — accepting matches, rejecting the rest.
+              <M color="#f59e0b">{'\\textbf{SD}'}</M> uses a small draft model to propose <M>{'K'}</M> tokens, then a large verifier to check them in one pass.
             </p>
             <p>
-              <M color="#3b82f6">{'\\textbf{SSD}'}</M> adds a second layer:
-              while the verifier is busy checking, the speculator doesn't sit idle.
-              It <em>predicts</em> what the verifier will say and pre-builds the next set of draft tokens
-              for each possible outcome, storing them in a <M color="#8b5cf6">{'\\text{speculation cache}'}</M>.
+              <M color="#3b82f6">{'\\textbf{SSD}'}</M> follows the paper's key idea: while the verifier works, the speculator predicts likely verification outcomes and fills a <M color="#8b5cf6">{'\\text{speculation cache}'}</M> for the next round.
             </p>
           </ConceptCard>
 
-          <ConceptCard title="What are v = (k, t*), acceptance rate (α), and the bonus token?">
+          <ConceptCard title="What are v = (pos, t*), acceptance rate (α), and the bonus token?">
             <p>
-              After verification, the verifier returns <M color="#3b82f6">{'v^T = (k, t^*)'}</M> where:
+              After verification, the verifier returns <M color="#3b82f6">{'v = (\\text{pos}, t^*)'}</M>:
             </p>
-            <MathBlock>{'k = \\text{number of consecutive draft tokens accepted} \\quad (0 \\leq k \\leq K)'}</MathBlock>
+            <MathBlock>{'\\text{pos} = \\text{number of consecutive draft tokens accepted} \\quad (0 \\leq \\text{pos} \\leq K)'}</MathBlock>
             <MathBlock>{'t^* = \\text{the "bonus token" — sampled from the adjusted target distribution}'}</MathBlock>
             <p>
-              The <M color="#22c55e">{'\\text{acceptance rate } \\alpha'}</M> controls how many tokens pass on average.
-              Each token is accepted if it's consistent with the target model's distribution. Once a token is rejected,
-              all subsequent tokens are discarded (they were conditioned on the wrong prefix).
+              <M>{'\\alpha'}</M> controls how often draft tokens survive verification. After the first rejection, later draft tokens are discarded.
             </p>
             <p>
-              The bonus token <M>{'t^*'}</M> is always generated — even if all <M>{'K'}</M> tokens are rejected,
-              you still get one new token. It's sampled from the <em>residual</em> distribution (the gap between target and draft).
-              In SSD, if the cache has a pre-computed speculation for the specific <M>{'(k, t^*)'}</M>,
-              the next round starts instantly.
+              The bonus token <M>{'t^*'}</M> is always added. If SSD already cached the realized <M>{'(\\text{pos}, t^*)'}</M>, the next round starts immediately.
             </p>
           </ConceptCard>
 
           <ConceptCard title="Why does the speculation cache eliminate idle time?">
             <p>
-              In standard SD, after the verifier returns <M>{'(k, t^*)'}</M>, the speculator must generate <M>{'K'}</M> new
-              draft tokens from scratch. During this drafting time, the verifier sits{' '}
-              <M color="#ef4444">{'\\text{idle}'}</M>.
+              In SD, once the verifier returns <M>{'(\\text{pos}, t^*)'}</M>, the draft model has to start again from scratch. That leaves the verifier <M color="#ef4444">{'\\text{idle}'}</M>.
             </p>
             <p>
-              In SSD, the speculator has already pre-computed draft tokens for several possible <M>{'(k, t^*)'}</M> outcomes
-              <em> while the verifier was running</em>. If one matches — a{' '}
-              <M color="#8b5cf6">{'\\text{cache hit}'}</M> — the next round begins with{' '}
-              <M color="#22c55e">{'\\text{zero idle time}'}</M>.
-            </p>
-            <p>
-              On a <M color="#6b7280">{'\\text{cache miss}'}</M>, a fallback speculator generates new tokens
-              (see Section 4 for how Saguaro optimizes this).
+              In SSD, those next-round drafts were built <em>during</em> verification. A <M color="#8b5cf6">{'\\text{cache hit}'}</M> removes the gap; a <M color="#6b7280">{'\\text{miss}'}</M> falls back to a new draft.
             </p>
           </ConceptCard>
         </div>

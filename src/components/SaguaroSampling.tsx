@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 import {
   zipfDistribution,
   saguaroDownweight,
-  residualDistribution,
+  residualMass,
   acceptanceRate,
   cacheHitRate,
 } from '../lib/distributions'
@@ -108,16 +108,16 @@ export function SaguaroSampling() {
 
     const draftDist = saguaroDownweight(rawTarget, cacheSet, C)
 
-    const residualDist = residualDistribution(rawTarget, draftDist)
+    const residualGap = residualMass(rawTarget, draftDist)
     const alphaVal = acceptanceRate(rawTarget, draftDist)
-    const hitRateVal = cacheHitRate(residualDist, cacheSet, Math.round(F) + 1, 6 + VOCAB_SIZE - Math.round(F))
+    const hitRateVal = cacheHitRate(residualGap, cacheSet, Math.round(F) + 1, 6 + VOCAB_SIZE - Math.round(F))
 
-    const maxP = Math.max(...rawTarget, ...draftDist, ...residualDist)
+    const maxP = Math.max(...rawTarget, ...draftDist, ...residualGap)
 
     return {
       target: rawTarget,
       draft: draftDist,
-      residual: residualDist,
+      residual: residualGap,
       alpha: alphaVal,
       hitRate: hitRateVal,
       cacheTokens: cacheSet,
@@ -130,7 +130,7 @@ export function SaguaroSampling() {
       number={3}
       title="Saguaro Sampling"
       subtitle="Manipulating the draft distribution to control the residual"
-      tooltip="Section 4.2, Definition 14: Saguaro sampling downweights cache tokens in the draft distribution by constant C."
+      tooltip="Section 4.2, Definition 14: Saguaro sampling downweights cache tokens in the draft distribution by C."
       referenceFigure="./reference-figures/fig5-saguaro-sampling.png"
     >
       <div className="bg-surface-2 rounded-xl p-5 border border-border">
@@ -173,13 +173,18 @@ export function SaguaroSampling() {
           <div className="flex items-center text-text-dim text-lg">→</div>
           <BarChart
             probs={residual}
-            label="Residual r(t)"
+            label="Residual gap Δ(t)"
             cacheTokens={cacheTokens}
             highlightIndex={hoverIndex}
             onHover={setHoverIndex}
             maxProb={maxProb}
-            tooltip="The residual distribution. When a token is rejected, the bonus token is sampled from here."
+            tooltip="The raw positive gap max(p_target - p_draft, 0). When a token is rejected, this gap is renormalized into the bonus-token distribution."
           />
+        </div>
+
+        <div className="text-xs text-text-dim text-center mb-5">
+          The residual chart shows the unnormalized gap mass so changes in <M>{'C'}</M> stay visible.
+          Bonus-token sampling renormalizes that gap only after a rejection happens.
         </div>
 
         <div className="grid grid-cols-2 gap-4">
@@ -202,9 +207,9 @@ export function SaguaroSampling() {
             </div>
           </Tooltip>
 
-          <Tooltip content="Probability that the bonus token lands on a cache token with a matching pre-computed speculation.">
+          <Tooltip content="Estimated rejected-round bonus-token hit proxy. It only tracks how much residual mass lands on cache tokens and how much continuation fan-out they have; it is not the full Section 2 continuation hit model.">
             <div className="p-3 rounded-lg bg-surface-3 border border-border">
-              <div className="text-xs text-text-dim mb-1">Cache hit rate</div>
+              <div className="text-xs text-text-dim mb-1">Bonus-token hit proxy</div>
               <div className="flex items-center gap-3">
                 <div className="flex-1 h-3 bg-surface rounded-full overflow-hidden">
                   <motion.div
@@ -232,48 +237,30 @@ export function SaguaroSampling() {
         </div>
 
         <div className="space-y-2">
-          <ConceptCard title="What is the residual distribution and why does it matter?" defaultOpen>
+          <ConceptCard title="What is the residual gap and why does it matter?" defaultOpen>
             <p>
-              In speculative decoding, when a draft token is <M color="#ef4444">{'\\text{rejected}'}</M>,
-              a bonus token <M>{'t^*'}</M> is sampled from the <strong>residual distribution</strong>:
+              When a draft token is <M color="#ef4444">{'\\text{rejected}'}</M>, the key object is the positive gap between target and draft:
             </p>
-            <MathBlock>{'r(t) = \\frac{\\max\\bigl(p_{\\text{target}}(t) - p_{\\text{draft}}(t),\\; 0\\bigr)}{Z}'}</MathBlock>
+            <MathBlock>{'\\Delta(t) = \\max\\bigl(p_{\\text{target}}(t) - p_{\\text{draft}}(t),\\; 0\\bigr)'}</MathBlock>
             <p>
-              where <M>{'Z = \\sum_t \\max(p_{\\text{target}}(t) - p_{\\text{draft}}(t), 0)'}</M> normalizes the distribution.
+              The chart shows this raw gap directly. The bonus token is sampled from its normalized version:
             </p>
+            <MathBlock>{'r(t) = \\frac{\\Delta(t)}{Z}, \\qquad Z = \\sum_t \\Delta(t)'}</MathBlock>
             <p>
-              Intuitively, the residual captures <em>"what the target model wants that the draft model didn't provide enough of."</em>
-              Wherever <M>{'p_{\\text{target}}'}</M> has more probability mass than <M>{'p_{\\text{draft}}'}</M>, the residual picks up that gap.
-            </p>
-            <p>
-              This matters because <M>{'t^*'}</M> determines which cache entry to look up. If we can
-              make <M>{'t^*'}</M> <em>predictable</em> (likely to be one of a small set of tokens), we can pre-cache
-              speculations for those tokens and get cache hits.
+              Plotting <M>{'\\Delta(t)'}</M> makes the effect of <M>{'C'}</M> visible: lowering <M>{'C'}</M> changes both where the residual lives and how much residual mass there is. If that mass moves onto cache tokens, <M>{'t^*'}</M> becomes more predictable.
             </p>
           </ConceptCard>
 
           <ConceptCard title="What does C (downweighting constant) actually do?">
             <p>
-              <M color="#3b82f6">{'C'}</M> is the Saguaro downweighting constant (Definition 14).
-              It multiplies the draft probability of the top-<M>{'F'}</M> cache tokens:
+              <M color="#3b82f6">{'C'}</M> scales the draft probability of the top-<M>{'F'}</M> cache tokens:
             </p>
             <MathBlock>{'p_{\\text{draft}}(t) = \\begin{cases} p_{\\text{original}}(t) \\times C & \\text{if } t \\in \\text{cache tokens} \\\\ p_{\\text{original}}(t) & \\text{otherwise} \\end{cases}'}</MathBlock>
             <p>
-              then renormalize so all probabilities sum to 1.
+              then renormalizes.
             </p>
             <p>
-              <M color="#22c55e">{'C = 1'}</M>: No modification — standard SD.
-              Acceptance rate is high, but the residual is spread out. Bonus tokens could be anything, making cache hits unlikely.
-            </p>
-            <p>
-              <M color="#f59e0b">{'C \\to 0'}</M>: Cache tokens become very unlikely in the draft. Since the target
-              still gives them high probability, the gap <M>{'p_{\\text{target}} - p_{\\text{draft}}'}</M> grows large for cache tokens.
-              The residual concentrates on them, making bonus tokens predictable — high cache hit rate.
-              But acceptance rate drops because the draft diverges from the target.
-            </p>
-            <p>
-              Try dragging <M>{'C'}</M> from 1 to 0 above and watch the purple bars (cache tokens) shrink in the draft
-              chart while growing in the residual chart.
+              <M color="#22c55e">{'C = 1'}</M> gives standard SD: high acceptance, small residual gap. As <M>{'C \\to 0'}</M>, cache tokens are suppressed in the draft, the gap moves onto them, hit rate rises, and acceptance falls.
             </p>
           </ConceptCard>
 
@@ -283,27 +270,21 @@ export function SaguaroSampling() {
               — the probability a draft token passes verification.
             </p>
             <p>
-              <M color="#8b5cf6">{'p_{\\text{hit}}'}</M> (cache hit rate) = probability the bonus token lands on a cached speculation.
+              <M color="#8b5cf6">{'p_{\\text{hit}}'}</M> (cache hit rate) = estimated probability that a rejected token
+              yields a cache-backed bonus continuation. In this panel it is shown as a bonus-token proxy, not the full Section 2 continuation-hit calculation over all <M>{'(\\text{pos}, t^*)'}</M> outcomes.
             </p>
             <p>
-              These are in <strong>tension</strong>: lowering <M>{'C'}</M> increases <M>{'p_{\\text{hit}}'}</M> but decreases <M>{'\\alpha'}</M>.
-              The optimal <M>{'C'}</M> maximizes overall throughput:
+              Lowering <M>{'C'}</M> usually raises <M>{'p_{\\text{hit}}'}</M> but lowers <M>{'\\alpha'}</M>. The useful setting is the one that maximizes throughput:
             </p>
             <MathBlock>{'\\text{Throughput} \\propto \\frac{\\alpha \\cdot K + 1}{T_{\\text{verify}} + (1 - p_{\\text{hit}}) \\cdot T_{\\text{fallback}}}'}</MathBlock>
           </ConceptCard>
 
           <ConceptCard title="What are F (fan-out) and temperature?">
             <p>
-              <M color="#8b5cf6">{'F'}</M> = number of top tokens designated as "cache tokens."
-              The speculation cache pre-computes draft continuations for these <M>{'F'}</M> tokens.
-              Larger <M>{'F'}</M> means more coverage but requires more compute budget.
+              <M color="#8b5cf6">{'F'}</M> is the number of top tokens treated as cache tokens. Larger <M>{'F'}</M> gives more coverage but costs more budget.
             </p>
             <p>
-              <M>{'T'}</M> (temperature) controls the entropy of the target distribution.
-              Low temperature (<M>{'T \\to 0'}</M>) means the target is very peaked — one token dominates, making prediction easy.
-              High temperature (<M>{'T \\to 2'}</M>) makes the distribution more uniform — many tokens
-              are equally likely, making it harder for any fixed cache to hit.
-              Saguaro's improvement is most dramatic at higher temperatures.
+              <M>{'T'}</M> controls entropy. Low <M>{'T'}</M> is easy to predict; high <M>{'T'}</M> spreads mass across many tokens, so Saguaro helps more.
             </p>
           </ConceptCard>
         </div>

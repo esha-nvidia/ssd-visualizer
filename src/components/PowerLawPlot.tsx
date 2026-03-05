@@ -55,14 +55,14 @@ export function PowerLawPlot() {
       number={5}
       title="Power-Law Cache Hit Scaling"
       subtitle="Log-log plot: cache miss rate decreases as a power law with fan-out"
-      tooltip="Section 4.1.3: The rejection rate follows 1 - p_hit(F) ~ F^(-r)."
+      tooltip="Section 4.1.3 / Definition 11: the idealized miss rate is 1 / F^rho; this plot adds a baseline factor to compare regimes."
       referenceFigure="./reference-figures/fig3-power-law-cache-hits.png"
     >
       <div className="bg-surface-2 rounded-xl p-5 border border-border">
         <div className="flex flex-wrap gap-x-6 gap-y-3 mb-5">
           <div className="w-44">
-            <Slider label="Exponent r" value={exponent} onChange={setExponent} min={0.2} max={2} step={0.05}
-              tooltip="Power-law exponent. Higher r = faster decrease in miss rate with fan-out." />
+            <Slider label="Exponent ρ" value={exponent} onChange={setExponent} min={0.2} max={2} step={0.05}
+              tooltip="Power-law exponent (ρ). Not to be confused with r(t) the residual distribution. Higher ρ = faster decrease in miss rate with fan-out." />
           </div>
           <div className="w-44">
             <Slider label="Acceptance rate" value={alphaBase} onChange={setAlphaBase} min={0.1} max={0.99}
@@ -148,7 +148,7 @@ export function PowerLawPlot() {
           />
           <Tooltip content="The slope on the log-log plot.">
             <div className="text-xs text-text-dim">
-              Slopes: {lines.map(l => `${l.label.split(' ')[0]}: r=${l.r.toFixed(2)}`).join(', ')}
+              Slopes: {lines.map(l => `${l.label.split(' ')[0]}: ρ=${l.r.toFixed(2)}`).join(', ')}
             </div>
           </Tooltip>
         </div>
@@ -156,47 +156,30 @@ export function PowerLawPlot() {
         <div className="space-y-2">
           <ConceptCard title="What does a power law mean here? (Section 4.1.3)" defaultOpen>
             <p>
-              The cache miss rate follows a <strong>power law</strong> with fan-out <M>{'F'}</M>:
+              Definition 11 uses the idealized power law:
             </p>
-            <MathBlock>{'1 - p_{\\text{hit}}(F) \\approx \\text{baseline} \\times F^{-r}'}</MathBlock>
+            <MathBlock>{'1 - p_{\\text{hit}}(F) = F^{-\\rho}'}</MathBlock>
+            <MathBlock>{'1 - p_{\\text{hit}}(F) \\approx \\text{baseline} \\times F^{-\\rho}'}</MathBlock>
             <p>
-              On a log-log plot, this is a straight line with slope <M>{'-r'}</M>.
-              The practical meaning: <em>doubling the fan-out always reduces misses by the same factor</em>,
-              specifically <M>{'2^r'}</M>. A steeper slope (larger <M>{'r'}</M>) means each additional cache slot is more valuable.
+              The panel adds a baseline multiplier so different temperatures and speculators can be shown on the same axes. On a log-log plot this is still a line with slope <M>{'-\\rho'}</M>. Here <M>{'\\rho'}</M> is the exponent, not the residual <M>{'r(t)'}</M>.
             </p>
           </ConceptCard>
 
-          <ConceptCard title="What is r (exponent) and what affects it?">
+          <ConceptCard title="What is ρ (exponent) and what affects it?">
             <p>
-              <M>{'r'}</M> is the power-law exponent — the slope on the log-log plot. It depends on:
+              <M>{'\\rho'}</M> is the slope. It tends to be larger when prediction is easier: stronger draft model, lower temperature, or better conditioning.
             </p>
             <p>
-              <strong>Draft model quality</strong>: a better draft model predicts the target more accurately,
-              so the residual is more concentrated → each fan-out slot is more effective → higher <M>{'r'}</M>.
-            </p>
-            <p>
-              <strong>Temperature</strong>: lower <M>{'T'}</M> → more peaked distribution → easier to predict → higher <M>{'r'}</M>.
-              At <M>{'T=0'}</M> (greedy), the target always picks one token, so even small fan-out works.
-            </p>
-            <p>
-              <strong>Primary vs backup</strong>: the primary speculator conditions on having already accepted <M>{'k'}</M> tokens,
-              which constrains the residual. The backup has less info, so its <M>{'r'}</M> is typically smaller.
+              The primary speculator usually has higher <M>{'\\rho'}</M> than the backup, because it is conditioned on already accepted tokens.
             </p>
           </ConceptCard>
 
           <ConceptCard title="Why does temperature affect the curves?">
             <p>
-              <M color="#22c55e">{'T=0'}</M> (greedy): target puts all mass on one token.
-              Even <M>{'F=1'}</M> can hit if that token is cached. The line drops steeply.
+              <M color="#22c55e">{'T=0'}</M> concentrates mass on very few tokens, so even small fan-out helps a lot.
             </p>
             <p>
-              <M color="#f59e0b">{'T=1.0'}</M>: probability spread over many tokens.
-              Need much larger <M>{'F'}</M> to cover likely bonus tokens. Shallower slope.
-            </p>
-            <p>
-              This is why Saguaro's sampling trick (Section 3) matters most at high temperature:
-              by concentrating the residual onto cache tokens, Saguaro effectively makes the problem look
-              more like low-temperature decoding from the cache's perspective.
+              Higher <M>{'T'}</M> spreads mass across many tokens, flattening the curve. This is why Saguaro sampling helps most at high temperature: it concentrates residual mass onto cache tokens.
             </p>
           </ConceptCard>
         </div>

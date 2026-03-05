@@ -10,6 +10,8 @@ export interface Round {
   draftEnd: number
 }
 
+type RNG = () => number
+
 /** Simulate SSD rounds for the timeline visualization */
 export function simulateSSD(params: {
   rounds: number
@@ -18,14 +20,15 @@ export function simulateSSD(params: {
   pHit: number // cache hit rate
   draftLatency: number // relative draft time (0-1, fraction of verify time)
   verifyLatency: number // verify time in abstract units
+  rng?: RNG
 }): Round[] {
-  const { rounds, K, alpha, pHit, draftLatency, verifyLatency } = params
+  const { rounds, K, alpha, pHit, draftLatency, verifyLatency, rng = Math.random } = params
   const results: Round[] = []
   let time = 0
 
   for (let i = 0; i < rounds; i++) {
-    const accepted = sampleAccepted(K, alpha)
-    const cacheHit = Math.random() < pHit
+    const accepted = sampleAccepted(K, alpha, rng)
+    const cacheHit = rng() < pHit
     const draftTime = draftLatency * verifyLatency
     const cacheDelay = cacheHit ? 0 : draftTime * 0.5
 
@@ -64,13 +67,14 @@ export function simulateSD(params: {
   alpha: number
   draftLatency: number
   verifyLatency: number
+  rng?: RNG
 }): Round[] {
-  const { rounds, K, alpha, draftLatency, verifyLatency } = params
+  const { rounds, K, alpha, draftLatency, verifyLatency, rng = Math.random } = params
   const results: Round[] = []
   let time = 0
 
   for (let i = 0; i < rounds; i++) {
-    const accepted = sampleAccepted(K, alpha)
+    const accepted = sampleAccepted(K, alpha, rng)
     const draftTime = draftLatency * verifyLatency
 
     const draftStart = time
@@ -98,10 +102,10 @@ export function simulateSD(params: {
   return results
 }
 
-function sampleAccepted(K: number, alpha: number): number {
+function sampleAccepted(K: number, alpha: number, rng: RNG): number {
   // Each token accepted with probability alpha, return count of consecutive accepts
   for (let i = 0; i < K; i++) {
-    if (Math.random() > alpha) return i
+    if (rng() > alpha) return i
   }
   return K
 }

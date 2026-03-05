@@ -94,24 +94,24 @@ export function SideBySideTimeline() {
             const verifyW = xScale(r.verifyEnd) - xScale(r.verifyStart)
             return (
               <g key={`sd-${i}`}>
-                <Tooltip content={`Round ${i + 1}: Draft ${K} tokens (${(r.draftEnd - r.draftStart).toFixed(2)} time units)`}>
-                  <motion.rect
+                <motion.rect
                     initial={{ width: 0 }}
                     animate={{ width: draftW }}
                     transition={{ duration: 0.5, delay: i * 0.15 }}
                     x={xScale(r.draftStart)} y={MARGIN.top} height={BAR_HEIGHT} rx={4}
                     fill={COLORS.draft} opacity={0.9}
-                  />
-                </Tooltip>
-                <Tooltip content={`Round ${i + 1}: Verify - accepted ${r.accepted}/${K} tokens`}>
-                  <motion.rect
+                  >
+                    <title>{`Round ${i + 1}: Draft ${K} tokens (${(r.draftEnd - r.draftStart).toFixed(2)} time units)`}</title>
+                  </motion.rect>
+                <motion.rect
                     initial={{ width: 0 }}
                     animate={{ width: verifyW }}
                     transition={{ duration: 0.5, delay: i * 0.15 + 0.1 }}
                     x={xScale(r.verifyStart)} y={MARGIN.top + BAR_HEIGHT + 4} height={BAR_HEIGHT} rx={4}
                     fill={COLORS.verify} opacity={0.9}
-                  />
-                </Tooltip>
+                  >
+                    <title>{`Round ${i + 1}: Verify - accepted ${r.accepted}/${K} tokens`}</title>
+                  </motion.rect>
                 {verifyW > 20 && (
                   <text
                     x={xScale(r.verifyStart) + verifyW / 2}
@@ -146,30 +146,30 @@ export function SideBySideTimeline() {
                   const draftW = xScale(r.draftEnd) - xScale(r.draftStart)
                   return (
                     <g key={`ssd-${i}`}>
-                      <Tooltip content={`Round ${i + 1}: Draft (parallel) + cache speculation`}>
-                        <motion.rect
+                      <motion.rect
                           initial={{ width: 0 }}
                           animate={{ width: draftW }}
                           transition={{ duration: 0.5, delay: i * 0.15 }}
                           x={xScale(r.draftStart)} y={ssdY} height={BAR_HEIGHT} rx={4}
                           fill={COLORS.draft} opacity={0.9}
-                        />
-                      </Tooltip>
-                      <Tooltip content={`Round ${i + 1}: Verify - ${r.accepted}/${K} accepted, cache ${r.cacheHit ? 'HIT' : 'MISS'}`}>
-                        <motion.rect
+                        >
+                          <title>{`Round ${i + 1}: Draft (parallel) + cache speculation`}</title>
+                        </motion.rect>
+                      <motion.rect
                           initial={{ width: 0 }}
                           animate={{ width: verifyW }}
                           transition={{ duration: 0.5, delay: i * 0.15 + 0.05 }}
                           x={xScale(r.verifyStart)} y={ssdY + BAR_HEIGHT + 4} height={BAR_HEIGHT} rx={4}
                           fill={COLORS.verify} opacity={0.9}
-                        />
-                      </Tooltip>
+                        >
+                          <title>{`Round ${i + 1}: Verify - ${r.accepted}/${K} accepted, cache ${r.cacheHit ? 'HIT' : 'MISS'}`}</title>
+                        </motion.rect>
                       {/* Cache hit/miss label to the right of verify block */}
-                      <Tooltip content={r.cacheHit
-                        ? 'Cache HIT — next round starts immediately, zero idle time'
-                        : 'Cache MISS — fallback speculator must generate new tokens (small delay)'
-                      }>
-                        <g>
+                      <g>
+                          <title>{r.cacheHit
+                            ? 'Cache HIT — next round starts immediately, zero idle time'
+                            : 'Cache MISS — fallback speculator must generate new tokens (small delay)'
+                          }</title>
                           <rect
                             x={xScale(r.verifyEnd) + 3}
                             y={ssdY + BAR_HEIGHT + 4 + (BAR_HEIGHT - 16) / 2}
@@ -187,7 +187,6 @@ export function SideBySideTimeline() {
                             {r.cacheHit ? 'HIT' : 'MISS'}
                           </text>
                         </g>
-                      </Tooltip>
                       {verifyW > 20 && (
                         <text
                           x={xScale(r.verifyStart) + verifyW / 2}

@@ -119,16 +119,8 @@ export function PowerLawPlot() {
                   initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 1 }}
                 />
                 {points.filter((_, i) => i % 3 === 0).map((p, i) => (
-                  <Tooltip
-                    key={i}
-                    content={
-                      <div>
-                        <div className="font-medium">{label}</div>
-                        <div>F = {p.F.toFixed(1)}</div>
-                        <div>Miss rate = {p.rate.toFixed(4)}</div>
-                      </div>
-                    }
-                  >
+                  <g key={i}>
+                    <title>{`${label} | F = ${p.F.toFixed(1)} | Miss rate = ${p.rate.toFixed(4)}`}</title>
                     <circle
                       cx={p.x}
                       cy={Math.max(0, Math.min(PLOT_H, p.y))}
@@ -137,7 +129,7 @@ export function PowerLawPlot() {
                       opacity={0}
                       className="hover:opacity-100 transition-opacity cursor-crosshair"
                     />
-                  </Tooltip>
+                  </g>
                 ))}
               </g>
             ))}

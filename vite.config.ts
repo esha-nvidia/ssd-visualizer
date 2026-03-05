@@ -4,4 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  define: {
+    __VERSION__: JSON.stringify('0.16.34'),
+  },
 })

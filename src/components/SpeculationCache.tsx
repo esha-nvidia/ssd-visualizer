@@ -125,12 +125,11 @@ export function SpeculationCache() {
         </div>
 
         <svg width={svgWidth} height={svgHeight} className="w-full" viewBox={`0 0 ${svgWidth} ${svgHeight}`}>
-          <Tooltip content="Current speculation s^T = (s_1, ..., s_K). The tree branches represent pre-computed speculations for different verification outcomes.">
-            <g>
-              <circle cx={svgWidth / 2} cy={20} r={NODE_SIZE / 2} fill={COLORS.draft} />
-              <text x={svgWidth / 2} y={24} textAnchor="middle" fill="white" fontSize={10} fontWeight="bold">s^T</text>
-            </g>
-          </Tooltip>
+          <g>
+            <title>Current speculation s^T = (s_1, ..., s_K). The tree branches represent pre-computed speculations for different verification outcomes.</title>
+            <circle cx={svgWidth / 2} cy={20} r={NODE_SIZE / 2} fill={COLORS.draft} />
+            <text x={svgWidth / 2} y={24} textAnchor="middle" fill="white" fontSize={10} fontWeight="bold">s^T</text>
+          </g>
 
           {tree.levels.map((nodes, depth) => (
             <g key={depth}>
@@ -150,7 +149,8 @@ export function SpeculationCache() {
                       animate={{ pathLength: 1, opacity: 0.6 }}
                       transition={{ duration: 0.3, delay: depth * 0.1 + i * 0.02 }}
                     />
-                    <Tooltip content={`Cache slot for outcome at position ${depth}, branch ${i + 1}/${node.fanoutCount}`}>
+                    <g>
+                      <title>{`Cache slot for outcome at position ${depth}, branch ${i + 1}/${node.fanoutCount}`}</title>
                       <motion.circle
                         cx={node.x}
                         cy={node.y}
@@ -162,7 +162,7 @@ export function SpeculationCache() {
                         animate={{ scale: 1 }}
                         transition={{ type: 'spring', delay: depth * 0.1 + i * 0.02 }}
                       />
-                    </Tooltip>
+                    </g>
                   </g>
                 )
               })}

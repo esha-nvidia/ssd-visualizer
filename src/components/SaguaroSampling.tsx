@@ -55,49 +55,39 @@ function BarChart({
 
           return (
             <g key={i} onMouseEnter={() => onHover(i)} onMouseLeave={() => onHover(null)}>
-              <Tooltip
-                content={
-                  <div>
-                    <div className="font-medium">Token {i} {isCache ? '(cache token)' : ''}</div>
-                    <div>Probability: {(p * 100).toFixed(1)}%</div>
-                  </div>
-                }
-              >
-                <g>
-                  <motion.rect
+                <title>{`Token ${i}${isCache ? ' (cache token)' : ''} | Probability: ${(p * 100).toFixed(1)}%`}</title>
+                <motion.rect
+                  x={x}
+                  y={MAX_BAR_HEIGHT - h}
+                  width={BAR_WIDTH}
+                  animate={{ height: h }}
+                  transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+                  rx={3}
+                  fill={isCache ? COLORS.cacheHit : COLORS.verify}
+                  opacity={isHovered ? 1 : 0.8}
+                  stroke={isHovered ? 'white' : 'none'}
+                  strokeWidth={2}
+                />
+                <text
+                  x={x + BAR_WIDTH / 2}
+                  y={MAX_BAR_HEIGHT + 14}
+                  textAnchor="middle"
+                  fill={COLORS.textDim}
+                  fontSize={9}
+                  fontFamily="monospace"
+                >
+                  t{i}
+                </text>
+                {isCache && (
+                  <rect
                     x={x}
-                    y={MAX_BAR_HEIGHT - h}
+                    y={MAX_BAR_HEIGHT + 20}
                     width={BAR_WIDTH}
-                    animate={{ height: h }}
-                    transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-                    rx={3}
-                    fill={isCache ? COLORS.cacheHit : COLORS.verify}
-                    opacity={isHovered ? 1 : 0.8}
-                    stroke={isHovered ? 'white' : 'none'}
-                    strokeWidth={2}
+                    height={3}
+                    rx={1}
+                    fill={COLORS.cacheHit}
                   />
-                  <text
-                    x={x + BAR_WIDTH / 2}
-                    y={MAX_BAR_HEIGHT + 14}
-                    textAnchor="middle"
-                    fill={COLORS.textDim}
-                    fontSize={9}
-                    fontFamily="monospace"
-                  >
-                    t{i}
-                  </text>
-                  {isCache && (
-                    <rect
-                      x={x}
-                      y={MAX_BAR_HEIGHT + 20}
-                      width={BAR_WIDTH}
-                      height={3}
-                      rx={1}
-                      fill={COLORS.cacheHit}
-                    />
-                  )}
-                </g>
-              </Tooltip>
+                )}
             </g>
           )
         })}

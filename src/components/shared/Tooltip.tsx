@@ -20,12 +20,16 @@ export function Tooltip({
 }) {
   return (
     <RadixTooltip.Root>
-      <RadixTooltip.Trigger asChild>{children}</RadixTooltip.Trigger>
+      <RadixTooltip.Trigger asChild>
+        <div className="inline-block">
+          {children}
+        </div>
+      </RadixTooltip.Trigger>
       <RadixTooltip.Portal>
         <RadixTooltip.Content
           side={side}
           sideOffset={6}
-          className="z-50 max-w-xs rounded-lg bg-surface-3 px-3 py-2 text-sm text-text shadow-lg border border-border animate-in fade-in-0 zoom-in-95"
+          className="z-50 max-w-xs rounded-lg bg-surface-3 px-3 py-2 text-sm text-text shadow-lg border border-border"
         >
           {content}
           <RadixTooltip.Arrow className="fill-surface-3" />

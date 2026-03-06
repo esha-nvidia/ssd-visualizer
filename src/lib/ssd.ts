@@ -8,6 +8,8 @@ export interface Round {
   verifyEnd: number
   draftStart: number
   draftEnd: number
+  fallbackStart?: number
+  fallbackEnd?: number
 }
 
 type RNG = () => number
@@ -51,6 +53,8 @@ export function simulateSSD(params: {
     // Speculator runs in parallel with verifier
     const draftStart = verifyStart
     const draftEnd = draftStart + draftTime
+    const fallbackStart = cacheHit ? undefined : verifyEnd
+    const fallbackEnd = cacheHit ? undefined : verifyEnd + fallbackTime
 
     const tokens = Array.from({ length: K }, (_, j) => `t${i * K + j}`)
     const bonusToken = `b${i}`
@@ -65,6 +69,8 @@ export function simulateSSD(params: {
       verifyEnd,
       draftStart,
       draftEnd,
+      fallbackStart,
+      fallbackEnd,
     })
 
     // Next round starts after verify completes + cache delay
@@ -135,7 +141,9 @@ function sampleAccepted(K: number, alpha: number, rng: RNG): number {
 /** Calculate tokens generated per unit time */
 export function throughput(rounds: Round[], initialDelay: number = 0): number {
   if (rounds.length === 0) return 0
-  const totalTime = initialDelay + Math.max(...rounds.map(r => Math.max(r.verifyEnd, r.draftEnd)))
+  const totalTime = initialDelay + Math.max(
+    ...rounds.map(r => Math.max(r.verifyEnd, r.draftEnd, r.fallbackEnd ?? 0))
+  )
   const totalTokens = rounds.reduce((acc, r) => acc + r.accepted + 1, 0)
   return totalTokens / totalTime
 }

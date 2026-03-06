@@ -119,7 +119,7 @@ export function SideBySideTimeline() {
     const ssdT = throughput(ssd, draftLatency)
     const mt = Math.max(
       ...sd.map(r => Math.max(r.verifyEnd, r.draftEnd)),
-      ...ssd.map(r => Math.max(r.verifyEnd, r.draftEnd))
+      ...ssd.map(r => Math.max(r.verifyEnd, r.draftEnd, r.fallbackEnd ?? 0))
     )
     return { sdRounds: sd, ssdRounds: ssd, sdThroughput: sdT, ssdThroughput: ssdT, speedup: ssdT / sdT, maxTime: mt }
   }, [alpha, pHit, draftLatency, seed])
@@ -238,6 +238,8 @@ export function SideBySideTimeline() {
                   const verifyX = xScale(r.verifyStart)
                   const verifyW = xScale(r.verifyEnd) - xScale(r.verifyStart)
                   const draftW = xScale(r.draftEnd) - xScale(r.draftStart)
+                  const fallbackX = r.fallbackStart === undefined ? null : xScale(r.fallbackStart)
+                  const fallbackW = r.fallbackEnd === undefined || fallbackX === null ? 0 : xScale(r.fallbackEnd) - fallbackX
                   const verifyRoundLabel = `R${i + 1}`
                   const draftRoundLabel = `R${i + 2}`
                   return (
@@ -252,6 +254,41 @@ export function SideBySideTimeline() {
                           <title>{`Preparing ${draftRoundLabel} in parallel while the verifier resolves ${verifyRoundLabel}`}</title>
                         </motion.rect>
                       <RoundPill x={draftX} y={ssdY} width={draftW} label={draftRoundLabel} accent={COLORS.draftLight} />
+                      {!r.cacheHit && fallbackX !== null && fallbackW > 0 && (
+                        <>
+                          <motion.rect
+                            initial={{ width: 0 }}
+                            animate={{ width: fallbackW }}
+                            transition={{ duration: 0.45, delay: i * 0.15 + 0.1 }}
+                            x={fallbackX}
+                            y={ssdY}
+                            height={BAR_HEIGHT}
+                            rx={4}
+                            fill={COLORS.reject}
+                            opacity={0.92}
+                            stroke="white"
+                            strokeOpacity={0.5}
+                            strokeWidth={1}
+                            strokeDasharray="5 4"
+                          >
+                            <title>{`Cache miss after ${verifyRoundLabel}: fallback rebuilds ${draftRoundLabel} sequentially before SSD can continue`}</title>
+                          </motion.rect>
+                          <RoundPill x={fallbackX} y={ssdY} width={fallbackW} label={`${draftRoundLabel}*`} accent={COLORS.reject} />
+                          {fallbackW > 34 && (
+                            <text
+                              x={fallbackX + fallbackW / 2}
+                              y={ssdY + BAR_HEIGHT / 2}
+                              textAnchor="middle"
+                              dominantBaseline="middle"
+                              fill="white"
+                              fontSize={9}
+                              fontWeight="bold"
+                            >
+                              fb
+                            </text>
+                          )}
+                        </>
+                      )}
                       <motion.rect
                           initial={{ width: 0 }}
                           animate={{ width: verifyW }}
@@ -282,6 +319,9 @@ export function SideBySideTimeline() {
                   const badgeX = Math.min(desiredX, width - MARGIN.right - CACHE_BADGE_WIDTH)
                   const badgeCenterX = badgeX + CACHE_BADGE_WIDTH / 2
                   const verifyBottomY = ssdY + BAR_HEIGHT * 2 + 4
+                  const fallbackCenterX = r.fallbackStart === undefined || r.fallbackEnd === undefined
+                    ? null
+                    : xScale((r.fallbackStart + r.fallbackEnd) / 2)
 
                   return (
                     <g key={`ssd-cache-${i}`}>
@@ -321,6 +361,18 @@ export function SideBySideTimeline() {
                       >
                         {r.cacheHit ? 'HIT' : 'MISS'}
                       </text>
+                      {!r.cacheHit && fallbackCenterX !== null && (
+                        <line
+                          x1={badgeCenterX}
+                          y1={cacheY + CACHE_BADGE_HEIGHT}
+                          x2={fallbackCenterX}
+                          y2={ssdY + BAR_HEIGHT}
+                          stroke={COLORS.reject}
+                          strokeWidth={1.5}
+                          opacity={0.8}
+                          strokeDasharray="4 4"
+                        />
+                      )}
                     </g>
                   )
                 })}
@@ -354,6 +406,7 @@ export function SideBySideTimeline() {
               { color: COLORS.verify, label: 'Verify', tooltip: 'Target model verifies draft tokens' },
               { color: COLORS.cacheHit, label: 'Cache hit', tooltip: 'Pre-computed speculation matched' },
               { color: COLORS.cacheMiss, label: 'Cache miss', tooltip: 'Fallback speculator needed' },
+              { color: COLORS.reject, label: 'Fallback rebuild', tooltip: 'Miss path: the next draft is regenerated sequentially after verification' },
             ]}
           />
           <div className="flex gap-4 text-sm">
@@ -381,7 +434,7 @@ export function SideBySideTimeline() {
               Each method has two lanes: <M color="#f59e0b">{'\\text{Draft}'}</M> and <M color="#3b82f6">{'\\text{Verify}'}</M>. The x-axis is time.
             </p>
             <p>
-              In <strong>SD</strong>, draft and verify alternate. In <strong>SSD</strong>, they overlap: while verify handles <M>{'R_t'}</M>, the speculator prepares <M>{'R_{t+1}'}</M>. A cache hit keeps that pipeline moving; a miss inserts fallback delay.
+              In <strong>SD</strong>, draft and verify alternate. In <strong>SSD</strong>, they overlap: while verify handles <M>{'R_t'}</M>, the speculator prepares <M>{'R_{t+1}'}</M>. A cache hit keeps that pipeline moving; a miss makes that speculative draft useless and adds a red fallback rebuild for <M>{'R_{t+1}'}</M>.
             </p>
           </ConceptCard>
 

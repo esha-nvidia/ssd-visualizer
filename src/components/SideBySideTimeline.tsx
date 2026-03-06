@@ -92,8 +92,28 @@ export function SideBySideTimeline() {
       }
     }
 
-    const sd = simulateSD({ rounds: ROUNDS, K, alpha, draftLatency, verifyLatency: 1, rng: makeRng(seed) })
-    const ssd = simulateSSD({ rounds: ROUNDS, K, alpha, pHit, draftLatency, verifyLatency: 1, rng: makeRng(seed) })
+    const acceptanceSeed = seed * 2 + 1
+    const hitSeed = seed * 2 + 2
+
+    const sd = simulateSD({
+      rounds: ROUNDS,
+      K,
+      alpha,
+      draftLatency,
+      verifyLatency: 1,
+      acceptanceRng: makeRng(acceptanceSeed),
+    })
+    const ssd = simulateSSD({
+      rounds: ROUNDS,
+      K,
+      alpha,
+      pHit,
+      draftLatency,
+      fallbackLatency: draftLatency,
+      verifyLatency: 1,
+      acceptanceRng: makeRng(acceptanceSeed),
+      hitRng: makeRng(hitSeed),
+    })
 
     const sdT = throughput(sd)
     const ssdT = throughput(ssd)
@@ -267,7 +287,7 @@ export function SideBySideTimeline() {
                     <g key={`ssd-cache-${i}`}>
                       <title>{r.cacheHit
                         ? 'Cache HIT — next round starts immediately, zero idle time'
-                        : 'Cache MISS — fallback speculator must generate new tokens (small delay)'
+                        : 'Cache MISS — fallback speculator must regenerate the next draft before SSD can continue'
                       }</title>
                       <line
                         x1={xScale(r.verifyEnd)}
@@ -371,7 +391,7 @@ export function SideBySideTimeline() {
             </p>
             <MathBlock>{'\\text{SD: } \\frac{\\alpha K + 1}{T_{\\text{draft}} + T_{\\text{verify}}} \\qquad \\text{SSD: } \\frac{\\alpha K + 1}{T_{\\text{verify}} + (1-p_{\\text{hit}}) \\cdot T_{\\text{fallback}}}'}</MathBlock>
             <p>
-              SSD removes draft time from the critical path and replaces it with miss-dependent fallback time.
+              SSD removes draft time from the critical path only when the cache hits. In this panel, misses use <M>{'T_{\\text{fallback}} = T_{\\text{draft}}'}</M>, so <M>{'p_{\\text{hit}} = 0'}</M> collapses back to SD-like throughput.
             </p>
           </ConceptCard>
         </div>

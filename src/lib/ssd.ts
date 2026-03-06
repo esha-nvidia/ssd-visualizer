@@ -20,17 +20,31 @@ export function simulateSSD(params: {
   pHit: number // cache hit rate
   draftLatency: number // relative draft time (0-1, fraction of verify time)
   verifyLatency: number // verify time in abstract units
+  fallbackLatency?: number // relative fallback draft time; defaults to draftLatency
+  acceptanceRng?: RNG
+  hitRng?: RNG
   rng?: RNG
 }): Round[] {
-  const { rounds, K, alpha, pHit, draftLatency, verifyLatency, rng = Math.random } = params
+  const {
+    rounds,
+    K,
+    alpha,
+    pHit,
+    draftLatency,
+    verifyLatency,
+    fallbackLatency = draftLatency,
+    acceptanceRng = params.rng ?? Math.random,
+    hitRng = params.rng ?? Math.random,
+  } = params
   const results: Round[] = []
   let time = 0
 
   for (let i = 0; i < rounds; i++) {
-    const accepted = sampleAccepted(K, alpha, rng)
-    const cacheHit = rng() < pHit
+    const accepted = sampleAccepted(K, alpha, acceptanceRng)
+    const cacheHit = hitRng() < pHit
     const draftTime = draftLatency * verifyLatency
-    const cacheDelay = cacheHit ? 0 : draftTime * 0.5
+    const fallbackTime = fallbackLatency * verifyLatency
+    const cacheDelay = cacheHit ? 0 : fallbackTime
 
     const verifyStart = time
     const verifyEnd = verifyStart + verifyLatency
@@ -67,14 +81,22 @@ export function simulateSD(params: {
   alpha: number
   draftLatency: number
   verifyLatency: number
+  acceptanceRng?: RNG
   rng?: RNG
 }): Round[] {
-  const { rounds, K, alpha, draftLatency, verifyLatency, rng = Math.random } = params
+  const {
+    rounds,
+    K,
+    alpha,
+    draftLatency,
+    verifyLatency,
+    acceptanceRng = params.rng ?? Math.random,
+  } = params
   const results: Round[] = []
   let time = 0
 
   for (let i = 0; i < rounds; i++) {
-    const accepted = sampleAccepted(K, alpha, rng)
+    const accepted = sampleAccepted(K, alpha, acceptanceRng)
     const draftTime = draftLatency * verifyLatency
 
     const draftStart = time

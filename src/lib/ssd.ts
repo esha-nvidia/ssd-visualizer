@@ -133,9 +133,9 @@ function sampleAccepted(K: number, alpha: number, rng: RNG): number {
 }
 
 /** Calculate tokens generated per unit time */
-export function throughput(rounds: Round[]): number {
+export function throughput(rounds: Round[], initialDelay: number = 0): number {
   if (rounds.length === 0) return 0
-  const totalTime = Math.max(...rounds.map(r => Math.max(r.verifyEnd, r.draftEnd)))
+  const totalTime = initialDelay + Math.max(...rounds.map(r => Math.max(r.verifyEnd, r.draftEnd)))
   const totalTokens = rounds.reduce((acc, r) => acc + r.accepted + 1, 0)
   return totalTokens / totalTime
 }

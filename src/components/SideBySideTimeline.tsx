@@ -116,7 +116,7 @@ export function SideBySideTimeline() {
     })
 
     const sdT = throughput(sd)
-    const ssdT = throughput(ssd)
+    const ssdT = throughput(ssd, draftLatency)
     const mt = Math.max(
       ...sd.map(r => Math.max(r.verifyEnd, r.draftEnd)),
       ...ssd.map(r => Math.max(r.verifyEnd, r.draftEnd))
@@ -344,7 +344,7 @@ export function SideBySideTimeline() {
 
         <div className="mt-2 text-xs text-text-dim">
           SSD is shown in steady state: the verifier is resolving <M>{'R_t'}</M> while the draft lane prepares <M>{'R_{t+1}'}</M>.
-          The initial bootstrap draft for <M>{'R_1'}</M> is omitted.
+          The initial bootstrap draft for <M>{'R_1'}</M> is omitted from the picture, but it is still counted in the SSD throughput readout.
         </div>
 
         <div className="flex items-center justify-between mt-4">
@@ -391,7 +391,7 @@ export function SideBySideTimeline() {
             </p>
             <MathBlock>{'\\text{SD: } \\frac{\\alpha K + 1}{T_{\\text{draft}} + T_{\\text{verify}}} \\qquad \\text{SSD: } \\frac{\\alpha K + 1}{T_{\\text{verify}} + (1-p_{\\text{hit}}) \\cdot T_{\\text{fallback}}}'}</MathBlock>
             <p>
-              SSD removes draft time from the critical path only when the cache hits. In this panel, misses use <M>{'T_{\\text{fallback}} = T_{\\text{draft}}'}</M>, so <M>{'p_{\\text{hit}} = 0'}</M> collapses back to SD-like throughput.
+              SSD removes draft time from the critical path only when the cache hits. In this panel, misses use <M>{'T_{\\text{fallback}} = T_{\\text{draft}}'}</M>, and the omitted bootstrap draft is still charged in the metric, so <M>{'p_{\\text{hit}} = 0'}</M> collapses back to SD throughput.
             </p>
           </ConceptCard>
         </div>

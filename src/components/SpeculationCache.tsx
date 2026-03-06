@@ -76,7 +76,7 @@ export function SpeculationCache() {
         <div className="flex flex-wrap gap-x-6 gap-y-3 mb-5">
           <div className="w-44">
             <Slider label="Acceptance rate" value={alpha} onChange={setAlpha} min={0.1} max={0.99}
-              tooltip="For fixed alpha < 1, small pos are still most likely. Raising alpha makes deeper pos less unlikely." />
+              tooltip="Higher alpha shifts both outcome mass and fan-out toward larger pos. At high alpha, the all-accepted pos = K branch can dominate." />
           </div>
           <div className="w-44">
             <Slider label="Cache budget B" value={budget} onChange={v => setBudget(Math.round(v))} min={4} max={24} step={1}
@@ -243,7 +243,7 @@ export function SpeculationCache() {
             </p>
             <MathBlock>{'F_{\\text{pos}} \\propto \\alpha^{\\text{pos}/(1+\\rho)} \\;\\; (\\text{pos} < K), \\qquad F_K \\propto \\alpha^{K/(1+\\rho)} (1-\\alpha)^{-1/(1+\\rho)}'}</MathBlock>
             <p>
-              For any fixed <M>{'\\alpha < 1'}</M>, earlier <M>{'\\text{pos}'}</M> are still more likely. Increasing <M>{'\\alpha'}</M> or <M>{'\\rho'}</M> makes deeper outcomes worth more cache, including the <M>{'\\text{pos}=K'}</M> all-accepted branch.
+              For <M>{'\\text{pos} < K'}</M>, the exact accepted-count probabilities still decay geometrically. But as <M>{'\\alpha'}</M> rises, the <M>{'\\text{pos}=K'}</M> all-accepted branch grows quickly and can become one of the most valuable outcomes, so the allocation shifts right.
             </p>
             <p>
               The predicted hit rate here uses the paper's outcome probabilities together with a power-law-style coverage proxy, so it tracks whether the realized <M>{'(\\text{pos}, t^*)'}</M> path is actually covered.

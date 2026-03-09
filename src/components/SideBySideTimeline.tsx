@@ -69,6 +69,60 @@ function RoundPill({
   )
 }
 
+function AcceptanceMeter({
+  x,
+  y,
+  width,
+  accepted,
+}: {
+  x: number
+  y: number
+  width: number
+  accepted: number
+}) {
+  const meterW = Math.max(28, Math.min(46, width - 12))
+  const meterH = 6
+  const meterX = x + (width - meterW) / 2
+  const meterY = y + BAR_HEIGHT - meterH - 4
+  const fillW = accepted === 0 ? 0 : Math.max((meterW * accepted) / K, 2)
+
+  return (
+    <g pointerEvents="none">
+      <rect
+        x={meterX}
+        y={meterY}
+        width={meterW}
+        height={meterH}
+        rx={3}
+        fill="white"
+        fillOpacity={0.18}
+      />
+      {accepted > 0 && (
+        <rect
+          x={meterX}
+          y={meterY}
+          width={fillW}
+          height={meterH}
+          rx={3}
+          fill={COLORS.accept}
+        />
+      )}
+      {Array.from({ length: K - 1 }, (_, i) => i + 1).map(step => (
+        <line
+          key={step}
+          x1={meterX + (meterW * step) / K}
+          y1={meterY + 1}
+          x2={meterX + (meterW * step) / K}
+          y2={meterY + meterH - 1}
+          stroke="white"
+          strokeOpacity={0.35}
+          strokeWidth={1}
+        />
+      ))}
+    </g>
+  )
+}
+
 export function SideBySideTimeline() {
   const [alpha, setAlpha] = useState(0.7)
   const [pHit, setPHit] = useState(0.8)
@@ -200,14 +254,22 @@ export function SideBySideTimeline() {
                   </motion.rect>
                 <RoundPill x={verifyX} y={MARGIN.top + BAR_HEIGHT + 4} width={verifyW} label={`R${i + 1}`} accent={COLORS.verifyLight} />
                 {verifyW > 20 && (
-                  <text
-                    x={verifyX + verifyW / 2}
-                    y={MARGIN.top + BAR_HEIGHT + 4 + BAR_HEIGHT / 2}
-                    textAnchor="middle" dominantBaseline="middle"
-                    fill="white" fontSize={10} fontWeight="bold"
-                  >
-                    {r.accepted}/{K}
-                  </text>
+                  <>
+                    <text
+                      x={verifyX + verifyW / 2}
+                      y={MARGIN.top + BAR_HEIGHT + 4 + BAR_HEIGHT / 2 - 4}
+                      textAnchor="middle" dominantBaseline="middle"
+                      fill="white" fontSize={10} fontWeight="bold"
+                    >
+                      {r.accepted}/{K}
+                    </text>
+                    <AcceptanceMeter
+                      x={verifyX}
+                      y={MARGIN.top + BAR_HEIGHT + 4}
+                      width={verifyW}
+                      accepted={r.accepted}
+                    />
+                  </>
                 )}
               </g>
             )
@@ -300,14 +362,22 @@ export function SideBySideTimeline() {
                         </motion.rect>
                       <RoundPill x={verifyX} y={ssdY + BAR_HEIGHT + 4} width={verifyW} label={verifyRoundLabel} accent={COLORS.verifyLight} />
                       {verifyW > 20 && (
-                        <text
-                          x={verifyX + verifyW / 2}
-                          y={ssdY + BAR_HEIGHT + 4 + BAR_HEIGHT / 2}
-                          textAnchor="middle" dominantBaseline="middle"
-                          fill="white" fontSize={10} fontWeight="bold"
-                        >
-                          {r.accepted}/{K}
-                        </text>
+                        <>
+                          <text
+                            x={verifyX + verifyW / 2}
+                            y={ssdY + BAR_HEIGHT + 4 + BAR_HEIGHT / 2 - 4}
+                            textAnchor="middle" dominantBaseline="middle"
+                            fill="white" fontSize={10} fontWeight="bold"
+                          >
+                            {r.accepted}/{K}
+                          </text>
+                          <AcceptanceMeter
+                            x={verifyX}
+                            y={ssdY + BAR_HEIGHT + 4}
+                            width={verifyW}
+                            accepted={r.accepted}
+                          />
+                        </>
                       )}
                     </g>
                   )

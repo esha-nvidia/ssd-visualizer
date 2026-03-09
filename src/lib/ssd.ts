@@ -14,6 +14,24 @@ export interface Round {
 
 type RNG = () => number
 
+export function expectedAcceptedTokens(K: number, alpha: number): number {
+  let total = 0
+  for (let i = 1; i <= K; i++) total += alpha ** i
+  return total
+}
+
+export function acceptedCountFromQuantile(K: number, alpha: number, quantile: number): number {
+  const q = Math.min(Math.max(quantile, 0), 1 - Number.EPSILON)
+  let cumulative = 0
+
+  for (let accepted = 0; accepted < K; accepted++) {
+    cumulative += alpha ** accepted * (1 - alpha)
+    if (q < cumulative) return accepted
+  }
+
+  return K
+}
+
 /** Simulate SSD rounds for the timeline visualization */
 export function simulateSSD(params: {
   rounds: number
@@ -23,6 +41,8 @@ export function simulateSSD(params: {
   draftLatency: number // relative draft time (0-1, fraction of verify time)
   verifyLatency: number // verify time in abstract units
   fallbackLatency?: number // relative fallback draft time; defaults to draftLatency
+  acceptedCounts?: number[]
+  hitPlan?: boolean[]
   acceptanceRng?: RNG
   hitRng?: RNG
   rng?: RNG
@@ -35,6 +55,8 @@ export function simulateSSD(params: {
     draftLatency,
     verifyLatency,
     fallbackLatency = draftLatency,
+    acceptedCounts,
+    hitPlan,
     acceptanceRng = params.rng ?? Math.random,
     hitRng = params.rng ?? Math.random,
   } = params
@@ -42,8 +64,8 @@ export function simulateSSD(params: {
   let time = 0
 
   for (let i = 0; i < rounds; i++) {
-    const accepted = sampleAccepted(K, alpha, acceptanceRng)
-    const cacheHit = hitRng() < pHit
+    const accepted = acceptedCounts?.[i] ?? sampleAccepted(K, alpha, acceptanceRng)
+    const cacheHit = hitPlan?.[i] ?? (hitRng() < pHit)
     const draftTime = draftLatency * verifyLatency
     const fallbackTime = fallbackLatency * verifyLatency
     const cacheDelay = cacheHit ? 0 : fallbackTime
@@ -87,6 +109,7 @@ export function simulateSD(params: {
   alpha: number
   draftLatency: number
   verifyLatency: number
+  acceptedCounts?: number[]
   acceptanceRng?: RNG
   rng?: RNG
 }): Round[] {
@@ -96,13 +119,14 @@ export function simulateSD(params: {
     alpha,
     draftLatency,
     verifyLatency,
+    acceptedCounts,
     acceptanceRng = params.rng ?? Math.random,
   } = params
   const results: Round[] = []
   let time = 0
 
   for (let i = 0; i < rounds; i++) {
-    const accepted = sampleAccepted(K, alpha, acceptanceRng)
+    const accepted = acceptedCounts?.[i] ?? sampleAccepted(K, alpha, acceptanceRng)
     const draftTime = draftLatency * verifyLatency
 
     const draftStart = time

@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { simulateSD, simulateSSD, throughput } from '../lib/ssd'
+import { acceptedCountFromQuantile, expectedAcceptedTokens, simulateSD, simulateSSD, throughput } from '../lib/ssd'
 import { COLORS } from '../lib/constants'
 import { SectionHeader } from './shared/SectionHeader'
 import { Slider } from './shared/Slider'
@@ -20,6 +20,12 @@ const ROUND_PILL_WIDTH = 22
 const ROUND_PILL_HEIGHT = 14
 const ROUND_PILL_MIN_WIDTH = 34
 const MARGIN = { top: 40, right: 40, bottom: 30, left: 80 }
+
+function stratifiedQuantiles(count: number, rotation: number): number[] {
+  return Array.from({ length: count }, (_, index) => (
+    (((index + rotation) % count) + 0.5) / count
+  ))
+}
 
 function RoundPill({
   x,
@@ -138,16 +144,12 @@ export function SideBySideTimeline() {
   }, [])
 
   const { sdRounds, ssdRounds, sdThroughput, ssdThroughput, speedup, maxTime } = useMemo(() => {
-    const makeRng = (initialSeed: number) => {
-      let s = initialSeed * 9301 + 49297
-      return () => {
-        s = (s * 9301 + 49297) % 233280
-        return s / 233280
-      }
-    }
-
-    const acceptanceSeed = seed * 2 + 1
-    const hitSeed = seed * 2 + 2
+    const acceptanceRotation = seed % ROUNDS
+    const hitRotation = (seed * 2 + 1) % ROUNDS
+    const acceptedCounts = stratifiedQuantiles(ROUNDS, acceptanceRotation)
+      .map(quantile => acceptedCountFromQuantile(K, alpha, quantile))
+    const hitPlan = stratifiedQuantiles(ROUNDS, hitRotation)
+      .map(quantile => quantile < pHit)
 
     const sd = simulateSD({
       rounds: ROUNDS,
@@ -155,7 +157,7 @@ export function SideBySideTimeline() {
       alpha,
       draftLatency,
       verifyLatency: 1,
-      acceptanceRng: makeRng(acceptanceSeed),
+      acceptedCounts,
     })
     const ssd = simulateSSD({
       rounds: ROUNDS,
@@ -165,8 +167,8 @@ export function SideBySideTimeline() {
       draftLatency,
       fallbackLatency: draftLatency,
       verifyLatency: 1,
-      acceptanceRng: makeRng(acceptanceSeed),
-      hitRng: makeRng(hitSeed),
+      acceptedCounts,
+      hitPlan,
     })
 
     const sdT = throughput(sd)
@@ -177,6 +179,8 @@ export function SideBySideTimeline() {
     )
     return { sdRounds: sd, ssdRounds: ssd, sdThroughput: sdT, ssdThroughput: ssdT, speedup: ssdT / sdT, maxTime: mt }
   }, [alpha, pHit, draftLatency, seed])
+  const expectedAccepted = useMemo(() => expectedAcceptedTokens(K, alpha), [alpha])
+  const expectedAcceptedShare = expectedAccepted / K
 
   const width = 800
   const chartHeight = 2 * (BAR_HEIGHT * 2 + ROW_GAP) + 96
@@ -195,8 +199,8 @@ export function SideBySideTimeline() {
       <div className="bg-surface-2 rounded-xl p-5 border border-border">
         <div className="flex flex-wrap gap-x-6 gap-y-3 mb-4">
           <div className="w-48">
-            <Slider label="Acceptance rate" value={alpha} onChange={setAlpha} min={0.1} max={1}
-              tooltip="Probability each draft token is accepted by the verifier" />
+            <Slider label="Per-step accept α" value={alpha} onChange={setAlpha} min={0.1} max={1}
+              tooltip="Conditional probability the verifier accepts the next draft token, given the earlier draft tokens in that round were accepted." />
           </div>
           <div className="w-48">
             <Slider label="Cache hit rate" value={pHit} onChange={setPHit} min={0} max={1}
@@ -212,6 +216,15 @@ export function SideBySideTimeline() {
           >
             Re-roll
           </button>
+        </div>
+        <div className="mb-4 text-xs text-text-dim">
+          Expected accepted draft tokens per round:
+          {' '}
+          <span className="font-mono text-text">{expectedAccepted.toFixed(2)}/{K}</span>
+          {' '}
+          <span className="text-text-dim">
+            ({(expectedAcceptedShare * 100).toFixed(1)}% of proposed draft tokens)
+          </span>
         </div>
 
         <svg width={width} height={totalHeight} className="w-full" viewBox={`0 0 ${width} ${totalHeight}`}>
@@ -467,6 +480,7 @@ export function SideBySideTimeline() {
         <div className="mt-2 text-xs text-text-dim">
           SSD is shown in steady state: the verifier is resolving <M>{'R_t'}</M> while the draft lane prepares <M>{'R_{t+1}'}</M>.
           The initial bootstrap draft for <M>{'R_1'}</M> is omitted from the picture, but it is still counted in the SSD throughput readout.
+          The six rounds are stratified representative outcomes, not a fresh noisy sample, so the panel tracks the sliders smoothly.
         </div>
 
         <div className="flex items-center justify-between mt-4">
@@ -510,9 +524,13 @@ export function SideBySideTimeline() {
 
           <ConceptCard title="What do the sliders control?">
             <p>
-              <M color="#22c55e">{'\\alpha'}</M> sets how many of the <M>{'K'}</M> draft tokens are accepted. <M color="#8b5cf6">{'p_{\\text{hit}}'}</M> affects only SSD. <M color="#f59e0b">{'T_{\\text{draft}} / T_{\\text{verify}}'}</M> sets draft cost.
+              <M color="#22c55e">{'\\alpha'}</M> is the conditional chance the verifier accepts the next draft token, so deeper accepts get geometrically less likely. <M color="#8b5cf6">{'p_{\\text{hit}}'}</M> affects only SSD. <M color="#f59e0b">{'T_{\\text{draft}} / T_{\\text{verify}}'}</M> sets draft cost.
             </p>
-            <MathBlock>{'\\text{SD: } \\frac{\\alpha K + 1}{T_{\\text{draft}} + T_{\\text{verify}}} \\qquad \\text{SSD: } \\frac{\\alpha K + 1}{T_{\\text{verify}} + (1-p_{\\text{hit}}) \\cdot T_{\\text{fallback}}}'}</MathBlock>
+            <p>
+              With <M>{'K=4'}</M>, the expected accepted count is <M>{'\\alpha + \\alpha^2 + \\alpha^3 + \\alpha^4'}</M>, not <M>{'4\\alpha'}</M>. At <M>{'\\alpha = 0.49'}</M>, that is about <M>{'0.91'}</M> accepted tokens per round on average.
+            </p>
+            <MathBlock>{'\\mathbb{E}[\\text{accepted}] = \\sum_{i=1}^{K} \\alpha^i \\qquad \\mathbb{E}[\\text{tokens/round}] = 1 + \\sum_{i=1}^{K} \\alpha^i'}</MathBlock>
+            <MathBlock>{'\\text{SD} \\approx \\frac{1 + \\sum_{i=1}^{K} \\alpha^i}{T_{\\text{draft}} + T_{\\text{verify}}} \\qquad \\text{SSD} \\approx \\frac{1 + \\sum_{i=1}^{K} \\alpha^i}{T_{\\text{verify}} + (1-p_{\\text{hit}}) \\cdot T_{\\text{fallback}}}'}</MathBlock>
             <p>
               SSD removes draft time from the critical path only when the cache hits. In this panel, misses use <M>{'T_{\\text{fallback}} = T_{\\text{draft}}'}</M>, and the omitted bootstrap draft is still charged in the metric, so <M>{'p_{\\text{hit}} = 0'}</M> collapses back to SD throughput.
             </p>

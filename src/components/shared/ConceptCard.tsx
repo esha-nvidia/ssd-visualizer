@@ -1,4 +1,5 @@
-import { ReactNode, useState, useMemo } from 'react'
+import { useState, useMemo } from 'react'
+import type { ReactNode } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import katex from 'katex'
 import 'katex/dist/katex.min.css'

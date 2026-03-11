@@ -1,5 +1,5 @@
 import * as RadixTooltip from '@radix-ui/react-tooltip'
-import { ReactNode } from 'react'
+import type { ReactNode } from 'react'
 
 export function TooltipProvider({ children }: { children: ReactNode }) {
   return (

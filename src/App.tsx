@@ -1,13 +1,24 @@
-import { useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react'
 import { TooltipProvider } from './components/shared/Tooltip'
 import { AlgorithmTimeline } from './components/AlgorithmTimeline'
-import { SpeculationCache } from './components/SpeculationCache'
-import { SaguaroSampling } from './components/SaguaroSampling'
-import { FallbackStrategy } from './components/FallbackStrategy'
-import { PowerLawPlot } from './components/PowerLawPlot'
-import { SideBySideTimeline } from './components/SideBySideTimeline'
 import { Tooltip } from './components/shared/Tooltip'
 import { ConceptCard, M } from './components/shared/ConceptCard'
+
+const SpeculationCache = lazy(() =>
+  import('./components/SpeculationCache').then(module => ({ default: module.SpeculationCache }))
+)
+const SaguaroSampling = lazy(() =>
+  import('./components/SaguaroSampling').then(module => ({ default: module.SaguaroSampling }))
+)
+const FallbackStrategy = lazy(() =>
+  import('./components/FallbackStrategy').then(module => ({ default: module.FallbackStrategy }))
+)
+const PowerLawPlot = lazy(() =>
+  import('./components/PowerLawPlot').then(module => ({ default: module.PowerLawPlot }))
+)
+const SideBySideTimeline = lazy(() =>
+  import('./components/SideBySideTimeline').then(module => ({ default: module.SideBySideTimeline }))
+)
 
 const SECTIONS = [
   { id: 'algo', label: 'Algorithm 1', short: '1' },
@@ -17,6 +28,77 @@ const SECTIONS = [
   { id: 'power', label: 'Scaling', short: '5' },
   { id: 'timeline', label: 'SD vs SSD', short: '6' },
 ] as const
+
+function SectionFallback({
+  label,
+  minHeight,
+}: {
+  label: string
+  minHeight: number
+}) {
+  return (
+    <div
+      className="rounded-xl border border-border bg-surface-2/60 p-5"
+      style={{ minHeight }}
+      aria-busy="true"
+    >
+      <div className="animate-pulse">
+        <div className="h-4 w-40 rounded bg-surface-3 mb-3" />
+        <div className="h-3 w-64 rounded bg-surface-3/80 mb-6" />
+        <div className="h-48 rounded-lg bg-surface-3/70" />
+      </div>
+      <p className="text-xs text-text-dim mt-3">Loading {label}…</p>
+    </div>
+  )
+}
+
+function DeferredSection({
+  id,
+  label,
+  minHeight,
+  active,
+  children,
+}: {
+  id: string
+  label: string
+  minHeight: number
+  active: boolean
+  children: ReactNode
+}) {
+  const ref = useRef<HTMLDivElement | null>(null)
+  const [seen, setSeen] = useState(() => active || typeof IntersectionObserver === 'undefined')
+  const shouldRender = active || seen
+
+  useEffect(() => {
+    if (shouldRender) return
+    const node = ref.current
+    if (!node) return
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry?.isIntersecting) return
+        setSeen(true)
+        observer.disconnect()
+      },
+      { rootMargin: '480px 0px' }
+    )
+
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [shouldRender])
+
+  return (
+    <div id={id} ref={ref}>
+      {shouldRender ? (
+        <Suspense fallback={<SectionFallback label={label} minHeight={minHeight} />}>
+          {children}
+        </Suspense>
+      ) : (
+        <SectionFallback label={label} minHeight={minHeight} />
+      )}
+    </div>
+  )
+}
 
 function App() {
   const [activeSection, setActiveSection] = useState<string | null>(null)
@@ -114,21 +196,21 @@ function App() {
           <div id="algo">
             <AlgorithmTimeline />
           </div>
-          <div id="cache">
+          <DeferredSection id="cache" label="Speculation Cache" minHeight={760} active={activeSection === 'cache'}>
             <SpeculationCache />
-          </div>
-          <div id="saguaro">
+          </DeferredSection>
+          <DeferredSection id="saguaro" label="Saguaro Sampling" minHeight={760} active={activeSection === 'saguaro'}>
             <SaguaroSampling />
-          </div>
-          <div id="fallback">
+          </DeferredSection>
+          <DeferredSection id="fallback" label="Fallback Strategy" minHeight={760} active={activeSection === 'fallback'}>
             <FallbackStrategy />
-          </div>
-          <div id="power">
+          </DeferredSection>
+          <DeferredSection id="power" label="Power-Law Scaling" minHeight={720} active={activeSection === 'power'}>
             <PowerLawPlot />
-          </div>
-          <div id="timeline">
+          </DeferredSection>
+          <DeferredSection id="timeline" label="SD vs SSD Timeline" minHeight={760} active={activeSection === 'timeline'}>
             <SideBySideTimeline />
-          </div>
+          </DeferredSection>
         </main>
 
         {/* Footer */}

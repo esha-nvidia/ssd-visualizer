@@ -36,14 +36,14 @@ function App() {
               <h1 className="text-lg font-bold text-text">
                 Speculative Speculative Decoding
               </h1>
-              <Tooltip content="Paper by Tanishq Kumar, Tri Dao, and Avner May (2025). Click to view on arXiv.">
+              <Tooltip content="Paper by Tanishq Kumar, Tri Dao, and Avner May (2026). Click to view on arXiv.">
                 <a
                   href="https://arxiv.org/abs/2603.03251"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-xs text-text-dim hover:text-verify transition-colors"
                 >
-                  Kumar, Dao & May (2025) — Interactive Visualizer
+                  Kumar, Dao & May (2026) — Interactive Visualizer
                 </a>
               </Tooltip>
             </div>
@@ -138,7 +138,7 @@ function App() {
             <a href="https://arxiv.org/abs/2603.03251" target="_blank" rel="noopener noreferrer" className="text-verify hover:underline">
               Speculative Speculative Decoding
             </a>
-            {' '}by Kumar, Dao & May (2025)
+            {' '}by Kumar, Dao & May (2026)
           </p>
         </footer>
       </div>

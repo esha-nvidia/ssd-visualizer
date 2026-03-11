@@ -1,6 +1,6 @@
 # Speculative Speculative Decoding — Interactive Visualizer
 
-An interactive web-based visualization of **Speculative Speculative Decoding (SSD)** and the **Saguaro algorithm**, based on [Kumar, Dao & May (2025)](https://arxiv.org/abs/2603.03251).
+An interactive web-based visualization of **Speculative Speculative Decoding (SSD)** and the **Saguaro algorithm**, based on [Kumar, Dao & May (2026)](https://arxiv.org/abs/2603.03251).
 
 The goal is to make the SSD framework intuitive through step-by-step animations and interactive controls, so that readers can build a mental model of how asynchronous speculative decoding works and why each optimization matters.
 
@@ -40,8 +40,7 @@ A split-view animation showing the **verifier** and **speculator** running in pa
 **Interactive controls:**
 - Play / pause / step-forward / step-back
 - Speed slider
-- Toggle: show SD (sequential) side-by-side for comparison
-- Slider: acceptance rate `α` (controls how many tokens get accepted per round)
+- Slider: acceptance rate `α`
 - Slider: cache hit rate `p_hit` (controls how often the cache matches)
 
 ---
@@ -67,9 +66,10 @@ Visualizes how Saguaro decides *which* verification outcomes to pre-speculate fo
 - **Verification outcome arrival:** When the actual `(k, t*)` arrives, the matching branch lights up (hit) or the whole tree dims (miss).
 
 **Interactive controls:**
-- Slider: acceptance rate `α_p` (shifts the geometric distribution)
+- Slider: acceptance rate `α`
 - Slider: cache budget `B` (total fan-out slots)
 - Slider: speculation lookahead `K`
+- Slider: power-law exponent `ρ`
 - Toggle: uniform vs geometric fan-out
 - Live readout: predicted cache hit rate `p_hit(F)`
 
@@ -81,7 +81,7 @@ Visualizes how Saguaro decides *which* verification outcomes to pre-speculate fo
 >
 > ![Figure 5 — Saguaro Sampling](./reference-figures/fig5-saguaro-sampling.png)
 >
-> *The paper's Figure 5 shows the tradeoff curve (left) and before/after bar charts (right) as static images. Our version makes the C slider interactive — drag it and watch the draft distribution, residual, acceptance rate, and cache hit rate all update live.*
+> *The paper's Figure 5 shows the tradeoff curve (left) and before/after bar charts (right) as static images. Our version makes the C slider interactive so the target distribution, Saguaro draft distribution, residual gap, and summary gauges update live.*
 
 Visualizes how Saguaro sampling manipulates the draft distribution to control the residual.
 
@@ -103,8 +103,7 @@ Visualizes how Saguaro sampling manipulates the draft distribution to control th
 - Slider: `C` (downweighting constant, 0 to 1)
 - Slider: `F` (fan-out / number of cache tokens)
 - Slider: temperature (affects target distribution entropy)
-- Editable: custom `p_target` and `p_draft` distributions (drag bar heights)
-- Live readouts: acceptance rate `α`, cache hit rate, residual entropy
+- Live readouts: acceptance rate `α`, bonus-token hit proxy
 
 ---
 
@@ -114,7 +113,7 @@ Visualizes how Saguaro sampling manipulates the draft distribution to control th
 >
 > ![Figure 6 — Fallback & Batch Size](./reference-figures/fig6-fallback-batch.png)
 >
-> *Figure 6 shows that fast backup wins at large batch sizes (left) and that more draft GPUs help (right). Our animation shows parallel batch lanes where you can watch cache misses stall the whole batch, and see the crossover point shift as you drag the batch size slider.*
+> *Figure 6 shows the fallback tradeoff. Our version focuses on the batch-size crossover: you can watch cache misses stall the whole batch and see when fast backup overtakes neural backup.*
 
 Visualizes why the optimal backup speculator changes with batch size.
 
@@ -138,23 +137,21 @@ Visualizes why the optimal backup speculator changes with batch size.
 
 ### 5. Power-Law Cache Hit Scaling (Section 4.1.3)
 
-> **Reference: Figure 3 + Figure 4 (paper)**
+> **Reference: Figure 3 (paper)**
 >
-> | Figure 3 — Power-law scaling | Figure 4 — Geometric vs uniform |
-> |---|---|
-> | ![Figure 3](./reference-figures/fig3-power-law-cache-hits.png) | ![Figure 4](./reference-figures/fig4-geometric-fanout.png) |
+> ![Figure 3](./reference-figures/fig3-power-law-cache-hits.png)
 >
-> *Figure 3's log-log plots show the power-law relationship between fan-out and cache misses. Figure 4 shows geometric fan-out beating uniform, especially at high temperature. Our interactive version lets you sweep the exponent `r`, acceptance rate, and temperature to see how the curves shift.*
+> *Figure 3 shows the power-law relationship between fan-out and cache misses. Our version makes the exponent, acceptance baseline, and primary-vs-backup regime interactive.*
 
 A log-log plot showing how cache miss rate decreases as a power law with fan-out.
 
 **Layout:**
 - Log-log axes: x = fan-out `F`, y = rejection rate `1 - p_hit(F)`
-- Lines for different temperatures (T=0, 0.7, 1.0) and draft models (1B, 3B)
-- Conditioned on primary vs backup speculator (two panels or toggle)
+- Lines for different temperatures (`T=0`, `0.7`, `1.0`)
+- Toggle for primary vs backup speculator
 
 **Interactive controls:**
-- Slider: power-law exponent `r`
+- Slider: power-law exponent `ρ`
 - Slider: acceptance rate `α`
 - Toggle: primary vs backup conditioning
 - Hover: show exact values
@@ -175,7 +172,7 @@ A Gantt-chart-style comparison of ordinary SD and SSD over multiple rounds.
 - Two rows of horizontal bars:
   - **SD:** draft block → verify block → draft block → verify block (sequential)
   - **SSD:** overlapping draft/verify blocks with cache hit/miss annotations
-- Time axis at the bottom. Total tokens generated shown as a counter.
+- Time axis at the bottom, plus throughput and speedup readouts.
 
 **Interactive controls:**
 - Slider: draft latency `T_p` relative to verify latency
@@ -191,11 +188,9 @@ A Gantt-chart-style comparison of ordinary SD and SSD over multiple rounds.
 |-------|--------|-----------|
 | Framework | **React + TypeScript** | Component model fits the multi-panel layout |
 | Animation | **Framer Motion** | Declarative animations, spring physics, layout transitions |
-| Charts | **D3.js** | Full control over the bar charts, log-log plots, and tree diagrams |
 | Sliders/UI | **Radix UI** | Accessible, unstyled primitives |
 | Styling | **Tailwind CSS** | Rapid prototyping |
 | Build | **Vite** | Fast dev server |
-| Deploy | **Vercel** or **GitHub Pages** | Zero-config static hosting |
 
 ---
 
@@ -215,8 +210,11 @@ ssd-visualizer/
 │   │   └── shared/
 │   │       ├── Slider.tsx
 │   │       ├── Toggle.tsx
-│   │       ├── TokenBar.tsx
-│   │       └── AnimationControls.tsx
+│   │       ├── AnimationControls.tsx
+│   │       ├── SectionHeader.tsx
+│   │       ├── Tooltip.tsx
+│   │       ├── Legend.tsx
+│   │       └── ConceptCard.tsx
 │   ├── lib/
 │   │   ├── ssd.ts                     # Core SSD simulation logic
 │   │   ├── distributions.ts           # Probability distribution utilities
@@ -230,39 +228,25 @@ ssd-visualizer/
 
 ---
 
-## Implementation Plan
+## Current Status
 
-### Phase 1: Core infrastructure
-- [ ] Project scaffolding (Vite + React + TS + Tailwind)
-- [ ] Shared slider, toggle, and animation control components
-- [ ] Core simulation logic (`ssd.ts`, `distributions.ts`)
-- [ ] Section navigation layout
+Implemented:
+- Core app shell, section navigation, shared controls, tooltips, and concept cards
+- Viz 1: deterministic SSD main-loop walkthrough with play/pause/step controls
+- Viz 2: cache fan-out tree with uniform vs geometric allocation and predicted hit-rate proxy
+- Viz 3: Saguaro target/draft/residual charts with linked gauges
+- Viz 4: fallback-vs-batch crossover view with expected-throughput proxy
+- Viz 5: power-law miss-rate plot with temperature curves and primary/backup toggle
+- Viz 6: SD vs SSD side-by-side Gantt timeline with cache-hit markers, fallback rebuild blocks, and acceptance meters
 
-### Phase 2: Hero animation (Viz 1 + Viz 6)
-- [ ] SD vs SSD side-by-side Gantt timeline
-- [ ] Full Algorithm 1 swim-lane animation with play/pause/step
-- [ ] Wire up acceptance rate and cache hit rate sliders
-
-### Phase 3: Cache & sampling deep dives (Viz 2 + Viz 3)
-- [ ] Speculation cache tree with uniform vs geometric fan-out
-- [ ] Saguaro sampling triple bar chart with C slider
-- [ ] Residual distribution live computation
-- [ ] Draggable custom distributions
-
-### Phase 4: Batch & scaling (Viz 4 + Viz 5)
-- [ ] Batch lane visualization with stall animation
-- [ ] Neural vs fast backup crossover
-- [ ] Power-law log-log plot with interactive exponents
-
-### Phase 5: Polish & deploy
-- [ ] Explanatory text / annotations between visualizations
-- [ ] Mobile responsiveness
-- [ ] Deploy to Vercel / GitHub Pages
-- [ ] Add link to original paper
+Remaining gaps:
+- Section 3 does not yet support draggable custom distributions
+- Mobile polish is partial rather than fully tuned
+- Deployment is not configured in this repo yet
 
 ---
 
 ## References
 
-- **Paper:** [Speculative Speculative Decoding](https://arxiv.org/abs/2603.03251) — Tanishq Kumar, Tri Dao, Avner May (2025)
+- **Paper:** [Speculative Speculative Decoding](https://arxiv.org/abs/2603.03251) — Tanishq Kumar, Tri Dao, Avner May (2026)
 - **Key concepts:** Algorithm 1 (SSD framework), Theorem 12 (geometric fan-out), Definition 14 (Saguaro sampling), Theorem 17 (optimal fallback)

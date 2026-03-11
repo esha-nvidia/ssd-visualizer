@@ -96,6 +96,30 @@ function BarChart({
   )
 }
 
+function LabeledConnector({
+  label,
+  subLabel,
+  tooltip,
+}: {
+  label: string
+  subLabel: string
+  tooltip: string
+}) {
+  return (
+    <Tooltip content={tooltip}>
+      <div className="flex flex-col items-center justify-center gap-1 min-w-[7rem] shrink-0 cursor-help">
+        <div className="text-[10px] font-medium text-text-dim text-center leading-tight">
+          {label}
+        </div>
+        <div className="text-text-dim text-lg leading-none">→</div>
+        <div className="text-[10px] text-text-dim/80 text-center leading-tight">
+          {subLabel}
+        </div>
+      </div>
+    </Tooltip>
+  )
+}
+
 export function SaguaroSampling() {
   const [C, setC] = useState(0.5)
   const [F, setF] = useState(3)
@@ -150,7 +174,8 @@ export function SaguaroSampling() {
           </div>
         </div>
 
-        <div className="flex flex-wrap justify-center gap-6 mb-5">
+        <div className="overflow-x-auto pb-2 mb-5">
+          <div className="flex items-center gap-4 min-w-max mx-auto px-1">
           <BarChart
             probs={target}
             label="Target p_target"
@@ -160,7 +185,11 @@ export function SaguaroSampling() {
             maxProb={maxProb}
             tooltip="The target model's true distribution. This is what we want to sample from."
           />
-          <div className="flex items-center text-text-dim text-lg">→</div>
+          <LabeledConnector
+            label="apply C"
+            subLabel="+ renorm"
+            tooltip="Saguaro downweights cache-token probabilities by C, then renormalizes to produce p_draft."
+          />
           <BarChart
             probs={draft}
             label="Draft p_draft (Saguaro)"
@@ -170,7 +199,11 @@ export function SaguaroSampling() {
             maxProb={maxProb}
             tooltip="The modified draft distribution after Saguaro downweighting. Cache tokens (purple) have lower probability."
           />
-          <div className="flex items-center text-text-dim text-lg">→</div>
+          <LabeledConnector
+            label="compute Δ(t)"
+            subLabel="from both"
+            tooltip="The residual gap uses both charts: Δ(t) = max(p_target(t) - p_draft(t), 0)."
+          />
           <BarChart
             probs={residual}
             label="Residual gap Δ(t)"
@@ -180,6 +213,7 @@ export function SaguaroSampling() {
             maxProb={maxProb}
             tooltip="The raw positive gap max(p_target - p_draft, 0). When a token is rejected, this gap is renormalized into the bonus-token distribution."
           />
+          </div>
         </div>
 
         <div className="text-xs text-text-dim text-center mb-5">

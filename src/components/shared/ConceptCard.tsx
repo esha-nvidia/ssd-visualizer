@@ -1,8 +1,57 @@
-import { useState, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import katex from 'katex'
-import 'katex/dist/katex.min.css'
+
+type KatexRuntime = (typeof import('katex'))['default']
+
+let katexRuntime: KatexRuntime | null = null
+let katexLoader: Promise<KatexRuntime> | null = null
+
+function loadKatex(): Promise<KatexRuntime> {
+  if (katexRuntime) return Promise.resolve(katexRuntime)
+  if (!katexLoader) {
+    katexLoader = Promise.all([
+      import('katex'),
+      import('katex/dist/katex.min.css'),
+    ]).then(([module]) => {
+      katexRuntime = module.default
+      return katexRuntime
+    })
+  }
+  return katexLoader
+}
+
+function renderMathIfReady(expression: string, displayMode: boolean): string | null {
+  if (!katexRuntime) return null
+  return katexRuntime.renderToString(expression, {
+    throwOnError: false,
+    displayMode,
+  })
+}
+
+function useRenderedMath(expression: string, displayMode: boolean): string | null {
+  const cachedHtml = renderMathIfReady(expression, displayMode)
+  const [asyncHtml, setAsyncHtml] = useState<string | null>(cachedHtml)
+
+  useEffect(() => {
+    if (cachedHtml !== null) return
+
+    let cancelled = false
+    loadKatex().then(runtime => {
+      if (cancelled) return
+      setAsyncHtml(runtime.renderToString(expression, {
+        throwOnError: false,
+        displayMode,
+      }))
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [cachedHtml, displayMode, expression])
+
+  return cachedHtml ?? asyncHtml
+}
 
 export function ConceptCard({
   title,
@@ -50,13 +99,22 @@ export function ConceptCard({
 
 /** Inline math: renders a LaTeX expression inline */
 export function M({ children, color }: { children: string; color?: string }) {
-  const html = useMemo(() => {
-    const colorCmd = color ? `\\textcolor{${color}}{${children}}` : children
-    return katex.renderToString(colorCmd, {
-      throwOnError: false,
-      displayMode: false,
-    })
-  }, [children, color])
+  const expression = useMemo(
+    () => (color ? `\\textcolor{${color}}{${children}}` : children),
+    [children, color]
+  )
+  const html = useRenderedMath(expression, false)
+
+  if (html === null) {
+    return (
+      <code
+        className="inline-block align-middle mx-0.5 rounded px-1 py-0.5 text-[0.9em] bg-surface-2 text-text"
+        style={color ? { color } : undefined}
+      >
+        {children}
+      </code>
+    )
+  }
 
   return (
     <span
@@ -68,12 +126,15 @@ export function M({ children, color }: { children: string; color?: string }) {
 
 /** Block math: renders a LaTeX expression as a display block */
 export function MathBlock({ children }: { children: string }) {
-  const html = useMemo(() => {
-    return katex.renderToString(children, {
-      throwOnError: false,
-      displayMode: true,
-    })
-  }, [children])
+  const html = useRenderedMath(children, true)
+
+  if (html === null) {
+    return (
+      <pre className="bg-surface-2 rounded-md px-3 py-2 text-text border border-border/50 my-1.5 overflow-x-auto text-[11px] whitespace-pre-wrap">
+        {children}
+      </pre>
+    )
+  }
 
   return (
     <div

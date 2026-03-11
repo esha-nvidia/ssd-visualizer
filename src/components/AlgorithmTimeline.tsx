@@ -367,7 +367,7 @@ export function AlgorithmTimeline() {
         </div>
 
         <div className="mb-4 text-xs text-text-dim">
-          Deterministic demo: each round uses fixed thresholds, so changing <M>{'\\alpha'}</M> or <M>{'p_{\\text{hit}}'}</M> updates the same rounds monotonically instead of reshuffling the story.
+          Deterministic demo: each round uses fixed thresholds, so changing <code className="font-mono text-text">alpha</code> or <code className="font-mono text-text">p_hit</code> updates the same rounds monotonically instead of reshuffling the story.
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
@@ -641,7 +641,7 @@ export function AlgorithmTimeline() {
         </div>
 
         <div className="space-y-2">
-          <ConceptCard title="Key terms: SD, SSD, Verifier, Speculator" defaultOpen>
+          <ConceptCard title="Key terms: SD, SSD, Verifier, Speculator">
             <p>
               <M color="#f59e0b">{'\\textbf{SD}'}</M> drafts <M>{'K'}</M> tokens, then waits for verification. <M color="#3b82f6">{'\\textbf{SSD}'}</M> uses that verification window to precompute likely next branches.
             </p>
